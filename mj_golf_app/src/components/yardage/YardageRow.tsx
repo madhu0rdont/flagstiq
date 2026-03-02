@@ -39,7 +39,7 @@ export function YardageRow({ entry }: { entry: YardageBookEntry }) {
           </div>
         )}
         <div className="text-right">
-          <div className="text-sm text-text-medium">{entry.dispersion}</div>
+          <div className="text-sm text-text-medium">{entry.dispersion}y</div>
           <div className="text-[10px] text-text-muted">disp</div>
         </div>
         <ChevronRight size={16} className="text-text-faint" />

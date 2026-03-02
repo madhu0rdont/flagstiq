@@ -23,7 +23,7 @@ export function PracticePage() {
       <div className="px-4 py-6">
         {/* Practice Actions */}
         <div className="mb-6">
-          <h3 className="mb-2 text-[10px] font-medium text-text-muted uppercase tracking-wide">Practice</h3>
+          <h3 className="mb-2 text-xs font-medium text-text-muted uppercase tracking-wide">Practice</h3>
           <div className="grid grid-cols-2 gap-2">
             <Link
               to="/session/new"

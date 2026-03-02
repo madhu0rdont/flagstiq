@@ -122,7 +122,7 @@ export function TrackmanTable({ shots, excludeMishits = false }: TrackmanTablePr
                   i % 2 === 1 ? 'bg-surface/50' : ''
                 } ${dimmed ? 'opacity-30' : ''}`}
               >
-                <td className="sticky left-0 z-5 bg-card px-2 py-1.5 font-mono text-text-muted">
+                <td className="sticky left-0 z-10 bg-card px-2 py-1.5 font-mono text-text-muted">
                   {shot.shotNumber}
                 </td>
                 {COLUMNS.map((col) => {

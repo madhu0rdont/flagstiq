@@ -246,6 +246,8 @@ export function SessionSummaryPage() {
               className={`relative h-5 w-9 rounded-full transition-colors ${
                 excludeMishits ? 'bg-primary' : 'bg-border'
               }`}
+              role="switch"
+              aria-checked={excludeMishits}
               aria-label="Exclude mishits"
             >
               <span
@@ -275,7 +277,7 @@ export function SessionSummaryPage() {
 
         {/* Flight Visualization */}
         {hasTrajectoryData && (
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
             <div className="flex-1 rounded-2xl border border-border overflow-hidden shadow-[var(--shadow-card)]">
               <TrajectoryChart
                 shots={flightShots}

@@ -34,9 +34,15 @@ export function ClubForm({ initial, onSave, onDelete, onCancel }: ClubFormProps)
   const manualCarry = initial?.manualCarry?.toString() || '';
   const manualTotal = initial?.manualTotal?.toString() || '';
 
+  const [nameError, setNameError] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
 
     onSave({
       name: name.trim(),
@@ -53,13 +59,18 @@ export function ClubForm({ initial, onSave, onDelete, onCancel }: ClubFormProps)
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <Input
-        label="Club Name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder='e.g. "7 Iron", "60° Lob"'
-        required
-      />
+      <div>
+        <Input
+          label="Club Name"
+          value={name}
+          onChange={(e) => { setName(e.target.value); setNameError(false); }}
+          placeholder='e.g. "7 Iron", "60° Lob"'
+          required
+        />
+        {nameError && (
+          <p className="mt-1 text-xs text-coral">Club name is required</p>
+        )}
+      </div>
 
       <Select
         label="Category"

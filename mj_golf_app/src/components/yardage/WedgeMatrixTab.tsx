@@ -123,7 +123,11 @@ export function WedgeMatrixTab() {
     await removeWedgeOverride(clubId, position);
   };
 
-  if (!wedges) return null;
+  if (!wedges) return (
+    <div className="flex items-center justify-center py-12">
+      <div className="animate-spin rounded-full h-7 w-7 border-2 border-primary border-t-transparent" />
+    </div>
+  );
 
   if (wedges.length === 0) {
     return (
@@ -208,7 +212,7 @@ export function WedgeMatrixTab() {
         </tbody>
       </table>
 
-      <p className="mt-3 text-xs text-text-faint">
+      <p className="mt-3 text-xs text-text-muted">
         Distances from practice are weighted by recency. Tap to override, double-tap to reset.
       </p>
     </div>

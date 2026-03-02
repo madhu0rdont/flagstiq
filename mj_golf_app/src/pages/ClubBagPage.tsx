@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { Plus, Briefcase } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
@@ -10,6 +11,7 @@ import { api } from '../lib/api';
 
 export function ClubBagPage() {
   const clubs = useAllClubs();
+  const [seeding, setSeeding] = useState(false);
 
   if (clubs === undefined) return <LoadingPage title="My Bag" />;
 
@@ -18,7 +20,7 @@ export function ClubBagPage() {
       <TopBar
         title="My Bag"
         rightAction={
-          <Link to="/bag/new" className="rounded-lg p-1.5 text-primary hover:text-primary-light">
+          <Link to="/bag/new" className="rounded-lg p-1.5 text-primary hover:text-primary-light" aria-label="Add club">
             <Plus size={20} />
           </Link>
         }
@@ -31,8 +33,12 @@ export function ClubBagPage() {
             description="Add clubs to get started, or load the default 14-club bag."
             action={
               <div className="flex gap-2">
-                <Button onClick={async () => { await api.post('/seed', {}); window.location.reload(); }} size="sm">
-                  Load Default Bag
+                <Button
+                  onClick={async () => { setSeeding(true); await api.post('/seed', {}); window.location.reload(); }}
+                  size="sm"
+                  disabled={seeding}
+                >
+                  {seeding ? 'Loading...' : 'Load Default Bag'}
                 </Button>
                 <Link to="/bag/new">
                   <Button variant="secondary" size="sm">

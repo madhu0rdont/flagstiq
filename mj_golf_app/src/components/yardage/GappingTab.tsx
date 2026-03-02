@@ -65,6 +65,8 @@ export function GappingTab() {
               className={`relative h-5 w-9 rounded-full transition-colors ${
                 excludeMishits ? 'bg-primary' : 'bg-border'
               }`}
+              role="switch"
+              aria-checked={excludeMishits}
               aria-label="Exclude mishits"
             >
               <span

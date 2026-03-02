@@ -33,6 +33,7 @@ export function TopBar({ title, showBack, rightAction }: TopBarProps) {
             <button
               onClick={() => navigate(-1)}
               className="rounded-lg p-1.5 text-text-muted hover:text-text-dark"
+              aria-label="Go back"
             >
               <ArrowLeft size={20} />
             </button>

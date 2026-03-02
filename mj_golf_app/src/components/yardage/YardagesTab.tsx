@@ -152,7 +152,11 @@ export function YardagesTab() {
     return groups;
   }, [clubs, entries]);
 
-  if (!grouped) return null;
+  if (!grouped) return (
+    <div className="flex items-center justify-center py-12">
+      <div className="animate-spin rounded-full h-7 w-7 border-2 border-primary border-t-transparent" />
+    </div>
+  );
 
   return (
     <div className="space-y-4">

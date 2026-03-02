@@ -125,6 +125,8 @@ export function ShotInputSheet({ open, onClose, clubs, suggestedClubId, defaultF
             className={`relative h-5 w-9 rounded-full transition-colors ${
               fullShot ? 'bg-primary' : 'bg-border'
             }`}
+            role="switch"
+            aria-checked={fullShot}
             aria-label="Full shot"
           >
             <span

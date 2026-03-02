@@ -26,7 +26,7 @@ export function HoleSelector({ totalHoles, current, onChange, keyHoles }: HoleSe
           <button
             key={n}
             onClick={() => onChange(n)}
-            className={`relative rounded-md py-1 text-xs font-medium transition-colors ${
+            className={`relative rounded-md min-h-[32px] py-1.5 text-xs font-medium transition-colors ${
               n === current
                 ? 'bg-primary text-white'
                 : 'bg-surface text-text-medium hover:bg-border'
@@ -35,7 +35,7 @@ export function HoleSelector({ totalHoles, current, onChange, keyHoles }: HoleSe
             {n}
             {keyHoles?.has(n) && (
               <span
-                className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full"
+                className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full"
                 style={{ backgroundColor: n === current ? 'white' : '#D4A843' }}
               />
             )}
