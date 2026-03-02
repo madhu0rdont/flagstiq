@@ -8,6 +8,9 @@ export interface ClubDistribution {
   stdCarry: number;
   meanOffline: number;
   stdOffline: number;
+  meanApex?: number;         // mean apex height in yards (from shot data)
+  meanLaunchAngle?: number;  // mean launch angle in degrees
+  meanDescentAngle?: number; // mean descent angle in degrees
 }
 
 export interface ApproachStrategy {
@@ -75,10 +78,18 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
     if (group.imputed) continue;
     if (group.shots.length < MIN_SHOTS_FOR_DISTRIBUTION) continue;
 
-    const carries = group.shots.map((s) => s.carryYards);
-    const offlines = group.shots
+    // Exclude mishits from distribution — they skew carry, offline, and flight data
+    const goodShots = group.shots.filter((s) => s.quality !== 'mishit');
+    const shotsForDist = goodShots.length >= MIN_SHOTS_FOR_DISTRIBUTION ? goodShots : group.shots;
+
+    const carries = shotsForDist.map((s) => s.carryYards);
+    const offlines = shotsForDist
       .map((s) => s.offlineYards)
       .filter((v): v is number => v != null);
+
+    const apexes = shotsForDist.map((s) => s.apexHeight).filter((v): v is number => v != null);
+    const launches = shotsForDist.map((s) => s.launchAngle).filter((v): v is number => v != null);
+    const descents = shotsForDist.map((s) => s.descentAngle).filter((v): v is number => v != null);
 
     const dist: ClubDistribution = {
       clubId: group.clubId,
@@ -87,6 +98,9 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
       stdCarry: stddev(carries),
       meanOffline: offlines.length > 0 ? mean(offlines) : 0,
       stdOffline: offlines.length > 0 ? stddev(offlines) : 5,
+      ...(apexes.length > 0 && { meanApex: mean(apexes) }),
+      ...(launches.length > 0 && { meanLaunchAngle: mean(launches) }),
+      ...(descents.length > 0 && { meanDescentAngle: mean(descents) }),
     };
     distributions.push(dist);
     realDists.push({ meanCarry: dist.meanCarry, meanOffline: dist.meanOffline, stdCarry: dist.stdCarry, stdOffline: dist.stdOffline });

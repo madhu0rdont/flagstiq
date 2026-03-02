@@ -5,9 +5,11 @@ import {
   generateNamedStrategies,
   simulateHoleGPS,
   optimizeHole,
+  ballHeightAtDistance,
 } from '../strategy-optimizer';
 import type { ClubDistribution } from '../monte-carlo';
 import type { CourseHole, HazardFeature } from '../../models/course';
+import { pointInPolygon, distanceToPolygonEdge } from '../../utils/geo';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -564,5 +566,226 @@ describe('optimizeHole', () => {
     for (const r of results) {
       expect(r.aimPoints.length).toBe(1);
     }
+  });
+
+  it('par 4 with left-side trees: no strategy aims into the trees', () => {
+    // Regression test modeled after the screenshot hole:
+    // ~365 yard par 4 with a tree line running along the left side at ~250-290y
+    const hole = makeHole(4, 365);
+
+    // Tree hazard: long narrow polygon along the left side at ~250-290y from tee
+    const treeSouth = 33.0 + 250 / 121100;
+    const treeNorth = 33.0 + 290 / 121100;
+    // Trees span from lng -117.0005 to -117.00015 (left of center line at -117.0)
+    hole.hazards = [
+      makeHazard({
+        type: 'trees',
+        name: 'Left Trees',
+        penalty: 0.5,
+        polygon: [
+          { lat: treeSouth, lng: -117.0005 },
+          { lat: treeSouth, lng: -117.00015 },
+          { lat: treeNorth, lng: -117.00015 },
+          { lat: treeNorth, lng: -117.0005 },
+        ],
+      }),
+    ];
+
+    // Use distributions matching the screenshot: Mini Driver ~250, 4 Hybrid ~215
+    const screenshotDists = [
+      makeDist({ clubId: 'mini-driver', clubName: 'Mini Driver', meanCarry: 250, stdCarry: 10, stdOffline: 8 }),
+      makeDist({ clubId: '4hybrid', clubName: '4 Hybrid', meanCarry: 215, stdCarry: 8, stdOffline: 7 }),
+      makeDist({ clubId: '7iron', clubName: '7 Iron', meanCarry: 165, stdCarry: 6, stdOffline: 5 }),
+      makeDist({ clubId: '9iron', clubName: '9 Iron', meanCarry: 144, stdCarry: 5, stdOffline: 4 }),
+      makeDist({ clubId: 'gw', clubName: 'GW', meanCarry: 115, stdCarry: 4, stdOffline: 3 }),
+      makeDist({ clubId: 'sw', clubName: 'SW', meanCarry: 85, stdCarry: 3, stdOffline: 3 }),
+    ];
+
+    const results = optimizeHole(hole, 'blue', screenshotDists, 500);
+    expect(results.length).toBeGreaterThanOrEqual(2);
+
+    const treePoly = hole.hazards[0].polygon;
+
+    for (const strategy of results) {
+      for (const ap of strategy.aimPoints) {
+        // No aim point should be inside the tree polygon
+        expect(pointInPolygon(ap.position, treePoly)).toBe(false);
+
+        // No aim point should be within 8y of the tree polygon edge (even aggressive uses 8y buffer)
+        const edgeDist = distanceToPolygonEdge(ap.position, treePoly);
+        expect(edgeDist).toBeGreaterThanOrEqual(7); // 8y buffer minus 1y tolerance
+
+        // Caddy tips should not say "Start at the left trees" or "at the trees"
+        if (ap.tip) {
+          expect(ap.tip).not.toMatch(/start at the.*trees/i);
+        }
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ballHeightAtDistance
+// ---------------------------------------------------------------------------
+
+describe('ballHeightAtDistance', () => {
+  // --- Fallback symmetric parabola (no apex/descent data) ---
+  it('returns 0 at launch (d=0)', () => {
+    expect(ballHeightAtDistance(0, 275)).toBe(0);
+  });
+
+  it('returns 0 at landing (d=carry)', () => {
+    expect(ballHeightAtDistance(275, 275)).toBe(0);
+  });
+
+  it('returns 0 for negative distance', () => {
+    expect(ballHeightAtDistance(-10, 275)).toBe(0);
+  });
+
+  it('returns 0 for distance beyond carry', () => {
+    expect(ballHeightAtDistance(300, 275)).toBe(0);
+  });
+
+  it('peaks at midpoint with apex = 28y (fallback)', () => {
+    const mid = ballHeightAtDistance(137.5, 275);
+    expect(mid).toBeCloseTo(28, 0); // 4 * 28 * 0.5 * 0.5 = 28
+  });
+
+  it('ball is low near landing zone (260y of 275y carry)', () => {
+    const height = ballHeightAtDistance(260, 275);
+    expect(height).toBeLessThan(15); // Below tree height
+  });
+
+  it('ball is high at mid-flight (150y of 275y carry)', () => {
+    const height = ballHeightAtDistance(150, 275);
+    expect(height).toBeGreaterThan(15); // Above tree height
+  });
+
+  // --- Asymmetric model (with real apex + descent angle) ---
+  it('asymmetric model: peaks at measured apex height', () => {
+    // Driver: 32y apex, 42° descent, 275y carry
+    // dApex = 275 - 32/tan(42°) ≈ 275 - 35.5 ≈ 239.5
+    const atApex = ballHeightAtDistance(240, 275, 32, 42);
+    expect(atApex).toBeGreaterThan(30);
+    expect(atApex).toBeLessThanOrEqual(32);
+  });
+
+  it('asymmetric model: apex is forward-shifted (not at midpoint)', () => {
+    // With steep descent (42°), apex should be past the midpoint
+    const atMid = ballHeightAtDistance(137.5, 275, 32, 42);
+    const atForward = ballHeightAtDistance(220, 275, 32, 42);
+    expect(atForward).toBeGreaterThan(atMid); // Still climbing at midpoint, higher later
+  });
+
+  it('asymmetric model: ball descends steeply near landing', () => {
+    // Driver: 32y apex, 42° descent, 275y carry
+    const at260 = ballHeightAtDistance(260, 275, 32, 42);
+    const at250 = ballHeightAtDistance(250, 275, 32, 42);
+    expect(at260).toBeLessThan(at250); // Descending
+    expect(at260).toBeLessThan(15); // Below tree height
+  });
+
+  it('asymmetric model: returns 0 at edges', () => {
+    expect(ballHeightAtDistance(0, 275, 32, 42)).toBe(0);
+    expect(ballHeightAtDistance(275, 275, 32, 42)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tree trajectory collision in simulation
+// ---------------------------------------------------------------------------
+
+describe('tree trajectory collision', () => {
+  const dists = makeDistributions();
+
+  it('trees near landing zone increase expected strokes (ball descending, below canopy)', () => {
+    // Trees at 260y — driver carry is 275y, ball height at 260y ≈ 6.4y < 15y tree height
+    const hole = makeHole(4, 400);
+    const treeLat = 33.0 + 260 / 121100;
+    hole.hazards = [
+      makeHazard({
+        type: 'trees',
+        name: 'Right Trees',
+        penalty: 0.5,
+        polygon: [
+          { lat: treeLat - 0.0003, lng: -117.0003 },
+          { lat: treeLat - 0.0003, lng: -116.9997 },
+          { lat: treeLat + 0.0003, lng: -116.9997 },
+          { lat: treeLat + 0.0003, lng: -117.0003 },
+        ],
+      }),
+    ];
+
+    const plans = generateNamedStrategies(hole, 'blue', dists);
+    const withTrees = simulateHoleGPS(plans[0], hole, dists, 500);
+
+    // Without trees
+    hole.hazards = [];
+    const plans2 = generateNamedStrategies(hole, 'blue', dists);
+    const withoutTrees = simulateHoleGPS(plans2[0], hole, dists, 500);
+
+    expect(withTrees.expectedStrokes).toBeGreaterThan(withoutTrees.expectedStrokes);
+  });
+
+  it('trees at mid-flight do not increase expected strokes (ball above canopy)', () => {
+    // Trees at 150y — driver carry is 275y, ball height at 150y ≈ 22y > 15y tree height
+    const hole = makeHole(4, 400);
+    const treeLat = 33.0 + 150 / 121100;
+    hole.hazards = [
+      makeHazard({
+        type: 'trees',
+        name: 'Mid Trees',
+        penalty: 0.5,
+        // Narrow strip across the fairway at 150y
+        polygon: [
+          { lat: treeLat - 0.00005, lng: -117.0003 },
+          { lat: treeLat - 0.00005, lng: -116.9997 },
+          { lat: treeLat + 0.00005, lng: -116.9997 },
+          { lat: treeLat + 0.00005, lng: -117.0003 },
+        ],
+      }),
+    ];
+
+    const plans = generateNamedStrategies(hole, 'blue', dists);
+    const withTrees = simulateHoleGPS(plans[0], hole, dists, 500);
+
+    // Without trees
+    hole.hazards = [];
+    const plans2 = generateNamedStrategies(hole, 'blue', dists);
+    const withoutTrees = simulateHoleGPS(plans2[0], hole, dists, 500);
+
+    // Should be similar — ball flies over mid-flight trees
+    expect(Math.abs(withTrees.expectedStrokes - withoutTrees.expectedStrokes)).toBeLessThan(0.3);
+  });
+
+  it('bunker hazards are not affected by trajectory check (only trees)', () => {
+    // Bunker at 260y — should NOT trigger trajectory collision even though ball is low
+    const hole = makeHole(4, 400);
+    const bunkerLat = 33.0 + 260 / 121100;
+    hole.hazards = [
+      makeHazard({
+        type: 'fairway_bunker',
+        name: 'Fairway Bunker',
+        penalty: 0.3,
+        polygon: [
+          { lat: bunkerLat - 0.0003, lng: -117.0003 },
+          { lat: bunkerLat - 0.0003, lng: -116.9997 },
+          { lat: bunkerLat + 0.0003, lng: -116.9997 },
+          { lat: bunkerLat + 0.0003, lng: -117.0003 },
+        ],
+      }),
+    ];
+
+    const plans = generateNamedStrategies(hole, 'blue', dists);
+    const withBunker = simulateHoleGPS(plans[0], hole, dists, 500);
+
+    // Without bunker
+    hole.hazards = [];
+    const plans2 = generateNamedStrategies(hole, 'blue', dists);
+    const withoutBunker = simulateHoleGPS(plans2[0], hole, dists, 500);
+
+    // Bunker only penalizes landing, not trajectory — difference should be small
+    // (the bunker is at 260y but the aim is shifted away by findSafeLanding, so few shots land in it)
+    expect(Math.abs(withBunker.expectedStrokes - withoutBunker.expectedStrokes)).toBeLessThan(0.5);
   });
 });

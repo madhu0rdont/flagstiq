@@ -55,6 +55,8 @@ const HOLE_THRESHOLD = 10;
 const MAX_SHOTS_PER_HOLE = 8;
 const DEFAULT_TRIALS = 2000;
 const MIN_HAZARD_POINTS = 3;
+const TREE_HEIGHT_YARDS = 15; // ~45 feet — typical mature golf course tree
+const BALL_APEX_YARDS = 28;   // ~84 feet — reasonable average across all clubs
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,6 +97,82 @@ export function checkHazards(
     }
   }
   return { inHazard: false, penalty: 0, hazardType: null };
+}
+
+// ---------------------------------------------------------------------------
+// Tree Trajectory Collision
+// ---------------------------------------------------------------------------
+
+const DEG_TO_RAD = Math.PI / 180;
+
+/** Ball height (yards) at distance d along the flight arc.
+ *  When club flight data is available (apex, descentAngle), uses an asymmetric
+ *  two-segment model with the apex forward-shifted. Falls back to a symmetric
+ *  parabola with constant 28y apex when no data is available. */
+export function ballHeightAtDistance(
+  d: number,
+  carry: number,
+  apex?: number,
+  descentAngle?: number,
+): number {
+  if (d <= 0 || d >= carry) return 0;
+
+  // Asymmetric model: use measured apex height and descent angle
+  if (apex != null && descentAngle != null && descentAngle > 0) {
+    const tanDescent = Math.tan(descentAngle * DEG_TO_RAD);
+    // Apex horizontal position: ball descends from apex to ground over (carry - dApex) yards
+    const dApex = Math.max(carry * 0.3, carry - apex / tanDescent);
+
+    if (d <= dApex) {
+      // Ascending phase: quadratic ramp from 0 to apex
+      const t = d / dApex;
+      return apex * t * (2 - t); // quadratic ease-out: starts steep, flattens at apex
+    } else {
+      // Descending phase: linear at descent angle
+      return apex * (carry - d) / (carry - dApex);
+    }
+  }
+
+  // Fallback: symmetric parabola with constant apex
+  return 4 * BALL_APEX_YARDS * (d / carry) * (1 - d / carry);
+}
+
+/** Check if a ball's trajectory passes through any tree polygon below canopy height.
+ *  Samples the flight path at 10y intervals near each tree polygon. */
+function checkTreeTrajectory(
+  from: { lat: number; lng: number },
+  bearing: number,
+  carry: number,
+  hazards: HazardFeature[],
+  club?: ClubDistribution,
+): { hitTrees: boolean; hitDistance: number } {
+  for (const h of hazards) {
+    if (h.type !== 'trees' || h.polygon.length < MIN_HAZARD_POINTS) continue;
+
+    // Quick filter: skip tree polygons not along the shot direction
+    const centroid = polygonCentroid(h.polygon);
+    const hazBearing = bearingBetween(from, centroid);
+    let angleDiff = Math.abs(hazBearing - bearing);
+    if (angleDiff > 180) angleDiff = 360 - angleDiff;
+    if (angleDiff > 45) continue;
+
+    const centroidDist = haversineYards(from, centroid);
+    if (centroidDist > carry + 20 || centroidDist < 10) continue;
+
+    // Sample flight path at 10y intervals through the tree area
+    const minDist = Math.max(20, centroidDist - 50);
+    const maxDist = Math.min(carry - 5, centroidDist + 50);
+
+    for (let d = minDist; d <= maxDist; d += 10) {
+      const height = ballHeightAtDistance(d, carry, club?.meanApex, club?.meanDescentAngle);
+      if (height >= TREE_HEIGHT_YARDS) continue; // Ball above canopy
+      const pos = projectPoint(from, bearing, d);
+      if (pointInPolygon(pos, h.polygon)) {
+        return { hitTrees: true, hitDistance: d };
+      }
+    }
+  }
+  return { hitTrees: false, hitDistance: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -630,6 +708,13 @@ export function simulateHoleGPS(
 
       strokes++;
 
+      // Check if ball flight clips trees en route
+      const treeHit = checkTreeTrajectory(currentPos, shotBearing, carry, hole.hazards, shot.clubDist);
+      if (treeHit.hitTrees) {
+        landing = projectPoint(currentPos, shotBearing, treeHit.hitDistance);
+        strokes += 0.5;
+      }
+
       const hazResult = checkHazards(landing, hole.hazards);
       if (hazResult.inHazard) {
         strokes += hazResult.penalty;
@@ -657,6 +742,13 @@ export function simulateHoleGPS(
       }
 
       strokes++;
+
+      // Check if ball flight clips trees en route
+      const greedyTreeHit = checkTreeTrajectory(currentPos, shotBearing, carry, hole.hazards, club);
+      if (greedyTreeHit.hitTrees) {
+        landing = projectPoint(currentPos, shotBearing, greedyTreeHit.hitDistance);
+        strokes += 0.5;
+      }
 
       const hazResult = checkHazards(landing, hole.hazards);
       if (hazResult.inHazard) {
