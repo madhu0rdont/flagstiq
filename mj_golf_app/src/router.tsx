@@ -55,6 +55,7 @@ export const router = createBrowserRouter([
       { path: 'strategy/:courseId', element: <Suspense fallback={<LoadingPage />}><StrategyPlannerPage /></Suspense> },
       { path: 'strategy/:courseId/:holeNumber', element: <Suspense fallback={<LoadingPage />}><StrategyPlannerPage /></Suspense> },
       { path: 'admin', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
+      { path: 'admin/courses', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
       { path: 'admin/penalties', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
       { path: 'admin/import', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
       { path: 'admin/:courseId', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
