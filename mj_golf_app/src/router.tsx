@@ -51,6 +51,7 @@ export const router = createBrowserRouter([
       { path: 'settings', element: <SettingsPage /> },
       { path: 'faq', element: <Suspense fallback={<LoadingPage />}><HowItWorksPage /></Suspense> },
       { path: 'strategy', element: <Suspense fallback={<LoadingPage />}><StrategyPlannerPage /></Suspense> },
+      { path: 'strategy/:courseId', element: <Suspense fallback={<LoadingPage />}><StrategyPlannerPage /></Suspense> },
       { path: 'strategy/:courseId/:holeNumber', element: <Suspense fallback={<LoadingPage />}><StrategyPlannerPage /></Suspense> },
       { path: 'admin', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
       { path: 'admin/penalties', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
