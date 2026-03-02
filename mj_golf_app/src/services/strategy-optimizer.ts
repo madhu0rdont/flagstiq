@@ -429,26 +429,40 @@ function generateCaddyTip(
   const ballDir = club.meanOffline > 1 ? 'right' : club.meanOffline < -1 ? 'left' : null;
   const ballWorks = ballDir ? `works ${ballDir}` : null;
 
-  // Find hazards near the aim point (within 50y of where we're actually aiming)
+  // Find hazards near the aim point OR along the shot corridor
   const aimBearing = bearingBetween(from, aimPos);
+  const shotDist = haversineYards(from, aimPos);
   interface NearbyHaz { desc: string; side: 'left' | 'right'; dist: number }
   const nearHaz: NearbyHaz[] = [];
   for (const h of hazards) {
     if (h.polygon.length < MIN_HAZARD_POINTS) continue;
     const c = polygonCentroid(h.polygon);
     const distToAim = haversineYards(aimPos, c);
-    if (distToAim > 50) continue;
+    const nearAim = distToAim <= 50;
+
+    // Also check if hazard is along the flight corridor (catches en-route trees, etc.)
+    const distFromOrigin = haversineYards(from, c);
+    const hazBearing = bearingBetween(from, c);
+    let bearingDelta = Math.abs(hazBearing - aimBearing);
+    if (bearingDelta > 180) bearingDelta = 360 - bearingDelta;
+    const perpDist = distFromOrigin * Math.sin(bearingDelta * Math.PI / 180);
+    const projDist = distFromOrigin * Math.cos(bearingDelta * Math.PI / 180);
+    const inCorridor = perpDist <= 35 && projDist >= shotDist * 0.2 && projDist <= shotDist * 1.2;
+
+    if (!nearAim && !inCorridor) continue;
 
     const relAngle = normalizeAngle(bearingBetween(from, c) - aimBearing);
     const side: 'left' | 'right' = relAngle >= 0 ? 'right' : 'left';
+    // Rank by proximity to the shot line (closer = more relevant)
+    const relevance = Math.min(distToAim, perpDist);
     nearHaz.push({
       desc: describeHazard(h, c, from, side, isApproach),
       side,
-      dist: distToAim,
+      dist: relevance,
     });
   }
 
-  // Sort by distance to target (closest hazard first = most relevant)
+  // Sort by relevance (closest to shot line first)
   nearHaz.sort((a, b) => a.dist - b.dist);
 
   // Dedupe by side (keep closest per side)

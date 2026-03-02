@@ -352,17 +352,20 @@ export async function migrate() {
     applied_at BIGINT NOT NULL
   )`);
 
-  // Force regeneration of all cached game plans after strategy-optimizer sync
+  // Force regeneration of all cached game plans after strategy-optimizer changes
+  // Bump version when optimizer logic changes (caddy tips, strategies, simulation, etc.)
+  const STRATEGY_SYNC_VERSION = 'strategy_sync_v2'; // v2: corridor-aware caddy tips
   const { rows: syncFlag } = await query(
-    "SELECT 1 FROM _migration_flags WHERE flag = 'strategy_sync_v1'",
+    'SELECT 1 FROM _migration_flags WHERE flag = $1',
+    [STRATEGY_SYNC_VERSION],
   );
   if (syncFlag.length === 0) {
     await query(
       "UPDATE game_plan_cache SET stale = TRUE, stale_reason = 'Strategy optimizer sync' WHERE stale = FALSE",
     );
     await query(
-      "INSERT INTO _migration_flags (flag, applied_at) VALUES ('strategy_sync_v1', $1)",
-      [Date.now()],
+      'INSERT INTO _migration_flags (flag, applied_at) VALUES ($1, $2)',
+      [STRATEGY_SYNC_VERSION, Date.now()],
     );
     logger.info('Marked all cached plans stale for strategy optimizer sync');
   }
