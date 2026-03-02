@@ -437,10 +437,12 @@ export function generateNamedStrategies(
       shots: [{ clubDist: pinClub, aimPoint: pin }],
     });
 
-    // Center Green: aim at midpoint between tee projection and pin (green center proxy)
-    const greenCenter = hole.fairway.length >= 3
-      ? polygonCentroid(hole.fairway)
-      : projectPoint(tee, heading, distance);
+    // Center Green: aim at the putting surface centroid (fall back to projected distance)
+    const greenCenter = hole.green?.length >= 3
+      ? polygonCentroid(hole.green)
+      : hole.fairway.length >= 3
+        ? polygonCentroid(hole.fairway)
+        : projectPoint(tee, heading, distance);
     const centerClub = closestClub(haversineYards(tee, greenCenter), distributions);
     if (centerClub) {
       plans.push({
