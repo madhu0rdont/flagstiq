@@ -438,10 +438,11 @@ export function generateNamedStrategies(
     });
 
     // Center Green: aim at the putting surface centroid (fall back to projected distance)
+    const allFairwayPts = hole.fairway.flat();
     const greenCenter = hole.green?.length >= 3
       ? polygonCentroid(hole.green)
-      : hole.fairway.length >= 3
-        ? polygonCentroid(hole.fairway)
+      : allFairwayPts.length >= 3
+        ? polygonCentroid(allFairwayPts)
         : projectPoint(tee, heading, distance);
     const centerClub = closestClub(haversineYards(tee, greenCenter), distributions);
     if (centerClub) {

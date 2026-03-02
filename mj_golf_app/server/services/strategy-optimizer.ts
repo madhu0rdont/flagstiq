@@ -400,8 +400,9 @@ export function generateNamedStrategies(
       shots: [{ clubDist: pinClub, aimPoint: pin }],
     });
 
-    const greenCenter = hole.fairway.length >= 3
-      ? polygonCentroid(hole.fairway)
+    const allFairwayPts = hole.fairway.flat();
+    const greenCenter = allFairwayPts.length >= 3
+      ? polygonCentroid(allFairwayPts)
       : projectPoint(tee, heading, distance);
     const centerClub = closestClub(haversineYards(tee, greenCenter), distributions);
     if (centerClub) {

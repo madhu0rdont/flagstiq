@@ -43,7 +43,7 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const polygonsRef = useRef<google.maps.Polygon[]>([]);
-  const fairwayPolygonRef = useRef<google.maps.Polygon | null>(null);
+  const fairwayPolygonsRef = useRef<google.maps.Polygon[]>([]);
   const greenPolygonRef = useRef<google.maps.Polygon | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const polylineRef = useRef<google.maps.Polyline | null>(null);
@@ -51,7 +51,8 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
   const drawingModeRef = useRef<DrawingMode>(null);
 
   const [hazards, setHazards] = useState<HazardFeature[]>([]);
-  const [fairway, setFairway] = useState<{ lat: number; lng: number }[]>([]);
+  const [fairways, setFairways] = useState<{ lat: number; lng: number }[][]>([]);
+  const [selectedFairwayIdx, setSelectedFairwayIdx] = useState<number | null>(null);
   const [green, setGreen] = useState<{ lat: number; lng: number }[]>([]);
   const [notes, setNotes] = useState('');
   const [par, setPar] = useState(4);
@@ -75,7 +76,7 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
       const legacyGreen = (hole.hazards ?? []).find((h) => h.type === 'green');
       const filteredHazards = (hole.hazards ?? []).filter((h) => h.type !== 'green');
       setHazards(filteredHazards);
-      setFairway(hole.fairway ?? []);
+      setFairways(hole.fairway ?? []);
       // Prefer top-level green, fall back to legacy hazard green
       setGreen(hole.green?.length ? hole.green : legacyGreen?.polygon ?? []);
       setNotes(hole.notes ?? '');
@@ -172,7 +173,7 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
         const mode = drawingModeRef.current;
 
         if (mode === 'fairway') {
-          setFairway(coords);
+          setFairways((prev) => [...prev, coords]);
           setDrawingMode(null);
         } else if (mode === 'green') {
           setGreen(coords);
@@ -261,42 +262,43 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
     // Clear old polygons
     for (const p of polygonsRef.current) p.setMap(null);
     polygonsRef.current = [];
-    if (fairwayPolygonRef.current) {
-      fairwayPolygonRef.current.setMap(null);
-      fairwayPolygonRef.current = null;
-    }
+    for (const fp of fairwayPolygonsRef.current) fp.setMap(null);
+    fairwayPolygonsRef.current = [];
     if (greenPolygonRef.current) {
       greenPolygonRef.current.setMap(null);
       greenPolygonRef.current = null;
     }
 
-    // Fairway
-    if (fairway.length >= 3) {
+    // Fairway polygons (multiple for split fairways)
+    for (let fIdx = 0; fIdx < fairways.length; fIdx++) {
+      const fwPoly = fairways[fIdx];
+      if (fwPoly.length < 3) continue;
+      const fairwayIdx = fIdx;
+      const isSelected = selectedFairwayIdx === fIdx;
       const fp = new google.maps.Polygon({
         map,
-        paths: fairway,
+        paths: fwPoly,
         fillColor: FAIRWAY_COLOR,
-        fillOpacity: 0.2,
-        strokeColor: FAIRWAY_COLOR,
-        strokeWeight: 2,
-        editable: false,
+        fillOpacity: isSelected ? 0.4 : 0.2,
+        strokeColor: isSelected ? '#FFFFFF' : FAIRWAY_COLOR,
+        strokeWeight: isSelected ? 3 : 2,
+        editable: isSelected,
         clickable: true,
       });
       const syncFairway = () => {
         const path = fp.getPath();
-        setFairway(
-          Array.from({ length: path.getLength() }, (_, i) => ({
-            lat: path.getAt(i).lat(),
-            lng: path.getAt(i).lng(),
-          })),
-        );
+        const coords = Array.from({ length: path.getLength() }, (_, i) => ({
+          lat: path.getAt(i).lat(),
+          lng: path.getAt(i).lng(),
+        }));
+        setFairways((prev) => prev.map((f, i) => (i === fairwayIdx ? coords : f)));
       };
       fp.getPath().addListener('set_at', syncFairway);
       fp.getPath().addListener('insert_at', syncFairway);
       fp.addListener('click', () => {
-        fp.setEditable(true);
+        setSelectedFairwayIdx((prev) => prev === fairwayIdx ? null : fairwayIdx);
       });
-      fairwayPolygonRef.current = fp;
+      fairwayPolygonsRef.current.push(fp);
     }
 
     // Green
@@ -370,7 +372,7 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
 
       polygonsRef.current.push(poly);
     }
-  }, [hazards, fairway, green]);
+  }, [hazards, fairways, selectedFairwayIdx, green]);
 
   // Highlight selected hazard polygon
   useEffect(() => {
@@ -431,7 +433,7 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
         credentials: 'include',
-        body: JSON.stringify({ hazards, fairway, green, notes: notes || null, par, handicap, yardages }),
+        body: JSON.stringify({ hazards, fairway: fairways, green, notes: notes || null, par, handicap, yardages }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Save failed' }));
@@ -673,9 +675,23 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
       )}
 
       {/* Fairway & Green status */}
-      <div className="flex gap-3 text-xs text-text-muted">
-        {fairway.length >= 3 && (
-          <span>Fairway: {fairway.length} pts</span>
+      <div className="flex flex-wrap gap-2 text-xs text-text-muted items-center">
+        {fairways.length > 0 && (
+          <>
+            <span>Fairway: {fairways.length} polygon{fairways.length !== 1 ? 's' : ''}</span>
+            {selectedFairwayIdx != null && (
+              <button
+                onClick={() => {
+                  setFairways((prev) => prev.filter((_, i) => i !== selectedFairwayIdx));
+                  setSelectedFairwayIdx(null);
+                }}
+                className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-coral hover:bg-coral/10"
+              >
+                <Trash2 size={10} />
+                Delete selected fairway
+              </button>
+            )}
+          </>
         )}
         {green.length >= 3 && (
           <span>Green: {green.length} pts</span>

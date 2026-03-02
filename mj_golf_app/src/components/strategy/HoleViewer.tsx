@@ -250,8 +250,8 @@ export function HoleViewer({ hole, landingZones, aimPoints }: HoleViewerProps) {
     if (landingZones) {
       for (const z of landingZones) bounds.extend(z.center);
     }
-    if (hole.fairway.length > 0) {
-      for (const p of hole.fairway) bounds.extend(p);
+    for (const poly of hole.fairway) {
+      for (const p of poly) bounds.extend(p);
     }
     map.fitBounds(bounds, { top: 40, bottom: 40, left: 20, right: 20 });
 
@@ -271,11 +271,12 @@ export function HoleViewer({ hole, landingZones, aimPoints }: HoleViewerProps) {
       }
     });
 
-    // 1. Fairway polygon
-    if (hole.fairway.length >= 3) {
+    // 1. Fairway polygons (may be multiple for split fairways)
+    for (const fairwayPoly of hole.fairway) {
+      if (fairwayPoly.length < 3) continue;
       const fp = new google.maps.Polygon({
         map,
-        paths: hole.fairway,
+        paths: fairwayPoly,
         fillColor: FAIRWAY_COLOR,
         fillOpacity: 0.2,
         strokeColor: FAIRWAY_COLOR,

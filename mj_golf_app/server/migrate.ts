@@ -228,5 +228,14 @@ export async function migrate() {
     );
   }
 
+  // Migrate fairway from single polygon to array of polygons
+  await query(`
+    UPDATE course_holes
+    SET fairway = jsonb_build_array(fairway)
+    WHERE jsonb_typeof(fairway) = 'array'
+      AND jsonb_array_length(fairway) > 0
+      AND jsonb_typeof(fairway->0) = 'object'
+  `);
+
   logger.info('Database migration complete');
 }
