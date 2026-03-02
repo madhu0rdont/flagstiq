@@ -127,7 +127,9 @@ export function AdminPage() {
   const selectedHole = params.holeNumber ? parseInt(params.holeNumber, 10) : null;
 
 
-  if (isLoading) return <LoadingPage title="Admin" showBack />;
+  const isAdmin = user?.role === 'admin';
+
+  if (isLoading) return <LoadingPage title="Admin" showBack={!isAdmin} />;
 
   function handleSelectHole(hole: number | null) {
     if (hole != null) {
@@ -139,7 +141,7 @@ export function AdminPage() {
 
   return (
     <>
-      <TopBar title="Admin" showBack />
+      <TopBar title="Admin" showBack={!isAdmin} />
       <div className="px-4 py-4 pb-6 flex flex-col gap-4">
 
         {/* Dashboard landing */}

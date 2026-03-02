@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { MapPin, Plus, Briefcase, Shield } from 'lucide-react';
+import { MapPin, Plus, Briefcase } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 
 export function HomePage() {
@@ -37,13 +37,6 @@ export function HomePage() {
           >
             <Briefcase size={14} />
             Bag
-          </Link>
-          <Link
-            to="/admin"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-text-medium transition-all duration-200 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-px"
-          >
-            <Shield size={14} />
-            Admin
           </Link>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 import { ChevronLeft, MapPin } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { LoadingPage } from '../components/ui/LoadingPage';
@@ -143,14 +143,8 @@ export function StrategyPlannerPage() {
         <TopBar title="Course Management" />
         <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
           <p className="text-sm text-text-muted">
-            No courses imported yet.
+            No courses available yet. Ask an admin to import one.
           </p>
-          <Link
-            to="/admin"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
-          >
-            Import a Course
-          </Link>
         </div>
       </>
     );
