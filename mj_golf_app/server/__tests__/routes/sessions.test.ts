@@ -151,8 +151,7 @@ describe('sessions routes', () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const res = await request(app).delete('/s1');
-      expect(res.status).toBe(200);
-      expect(res.body.ok).toBe(true);
+      expect(res.status).toBe(204);
       expect(mockQuery).toHaveBeenCalledWith(
         'DELETE FROM sessions WHERE id = $1',
         ['s1']

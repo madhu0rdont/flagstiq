@@ -9,7 +9,7 @@ interface GappingChartProps {
 const CATEGORY_COLORS = THEME.category;
 
 /** Custom bar shape that renders dashed outlines for imputed clubs */
-function GappingBar(props: any) {
+function GappingBar(props: { x?: number; y?: number; width?: number; height?: number; fill?: string; imputed?: boolean }) {
   const { x, y, width, height, fill, imputed } = props;
   if (imputed) {
     return (
@@ -70,8 +70,8 @@ export function GappingChart({ entries }: GappingChartProps) {
           <Bar
             dataKey="carry"
             barSize={24}
-            shape={(props: any) => {
-              const item = data[props.index];
+            shape={(props: { x?: number; y?: number; width?: number; height?: number; fill?: string; index?: number }) => {
+              const item = data[props.index ?? 0];
               return (
                 <GappingBar
                   {...props}

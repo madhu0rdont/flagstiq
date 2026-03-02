@@ -216,7 +216,7 @@ router.delete('/:id', async (_req, res) => {
   try {
     await query('DELETE FROM sessions WHERE id = $1', [_req.params.id]);
     await markPlansStale('Practice data deleted');
-    res.json({ ok: true });
+    res.status(204).end();
   } catch (err) {
     logger.error('Failed to delete session', { error: String(err) });
     res.status(500).json({ error: 'Internal server error' });

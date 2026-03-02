@@ -2,6 +2,9 @@
 // Mirrors client-side models without browser dependencies.
 
 export type ClubCategory = 'driver' | 'wood' | 'hybrid' | 'iron' | 'wedge' | 'putter';
+export type ShotShape = 'straight' | 'draw' | 'fade' | 'hook' | 'slice' | 'pull' | 'push';
+export type ShotQuality = 'pure' | 'good' | 'acceptable' | 'mishit';
+export type SwingPosition = 'full' | 'shoulder' | 'hip';
 
 export interface Club {
   id: string;
@@ -15,7 +18,7 @@ export interface Club {
   manualCarry?: number | null;
   manualTotal?: number | null;
   computedCarry?: number;
-  preferredShape?: string | null;
+  preferredShape?: ShotShape | null;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
@@ -38,9 +41,9 @@ export interface Shot {
   pushPull?: number;
   sideSpinRate?: number;
   descentAngle?: number;
-  shape?: string;
-  quality?: string;
-  position?: string;
+  shape?: ShotShape;
+  quality?: ShotQuality;
+  position?: SwingPosition;
   holeNumber?: number;
   timestamp: number;
 }
