@@ -243,12 +243,7 @@ describe('generateNamedStrategies', () => {
     expect(plans.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('Aggressive does not dodge hazards (no findSafeLanding)', () => {
-    const hole = makeHole(4, 400);
-    hole.targets = [];
-    // Place hazard at 275y (driver carry) — Conservative should dodge, Aggressive should not
-    // But with dedup, Aggressive may not exist. Use a hole where they differ.
-    // With targets at 240y: Conservative → 3 Wood at target, Aggressive → Driver at 275y
+  it('Aggressive nudges away from hazards with a smaller buffer than Conservative', () => {
     const hole2 = makeHole(4, 400);
     const hazardLat = 33.0 + 275 / 121100;
     hole2.hazards = [
@@ -266,8 +261,8 @@ describe('generateNamedStrategies', () => {
     const plans = generateNamedStrategies(hole2, 'blue', dists);
     const aggressive = plans.find((p) => p.name === 'Aggressive');
     if (aggressive) {
-      // Aggressive aim should stay on center line (lng ≈ -117.0) despite the hazard
-      expect(aggressive.shots[0].aimPoint.lng).toBeCloseTo(-117.0, 4);
+      // Aggressive aim should be nudged away from hazard (lng shifted from -117.0)
+      expect(aggressive.shots[0].aimPoint.lng).not.toBeCloseTo(-117.0, 4);
     }
   });
 

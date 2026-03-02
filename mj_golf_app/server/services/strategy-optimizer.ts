@@ -1,7 +1,7 @@
 import { expectedPutts } from './monte-carlo.js';
 import type { ClubDistribution, ApproachStrategy } from './monte-carlo.js';
 import type { CourseHole, HazardFeature } from '../models/types.js';
-import { projectPoint, haversineYards, pointInPolygon, bearingBetween } from './geo.js';
+import { projectPoint, haversineYards, pointInPolygon, bearingBetween, distanceToPolygonEdge } from './geo.js';
 
 // Re-export for convenience
 export { buildDistributions } from './monte-carlo.js';
@@ -199,12 +199,23 @@ function findSafeLanding(
   target: { lat: number; lng: number },
   heading: number,
   hazards: HazardFeature[],
+  buffer: number = 15,
 ): { lat: number; lng: number } {
-  if (hazards.length === 0 || !checkHazards(target, hazards).inHazard) return target;
-  for (const dir of [-1, 1]) {
-    for (const offset of [10, 20, 30]) {
+  if (hazards.length === 0) return target;
+
+  const isTooClose = (pt: { lat: number; lng: number }) =>
+    hazards.some((h) => {
+      if (h.polygon.length < MIN_HAZARD_POINTS) return false;
+      if (pointInPolygon(pt, h.polygon)) return true;
+      return distanceToPolygonEdge(pt, h.polygon) < buffer;
+    });
+
+  if (!isTooClose(target)) return target;
+
+  for (const offset of [10, 20, 30, 40, 50]) {
+    for (const dir of [-1, 1]) {
       const shifted = projectPoint(target, heading + 90, dir * offset);
-      if (!checkHazards(shifted, hazards).inHazard) return shifted;
+      if (!isTooClose(shifted)) return shifted;
     }
   }
   return target;
@@ -232,14 +243,25 @@ function computeCarryNote(
   for (const h of hazards) {
     if (h.polygon.length < MIN_HAZARD_POINTS) continue;
     const centroid = polygonCentroid(h.polygon);
-    const dist = haversineYards(from, centroid);
-
-    if (dist > carry + 50 || dist < 20) continue;
 
     const hazBearing = bearingBetween(from, centroid);
     let angleDiff = Math.abs(hazBearing - bearing);
     if (angleDiff > 180) angleDiff = 360 - angleDiff;
     if (angleDiff > 35) continue;
+
+    let nearestDist = Infinity;
+    for (const v of h.polygon) {
+      const vBearing = bearingBetween(from, v);
+      let vAngle = Math.abs(vBearing - bearing);
+      if (vAngle > 180) vAngle = 360 - vAngle;
+      if (vAngle > 40) continue;
+      const d = haversineYards(from, v);
+      if (d < nearestDist) nearestDist = d;
+    }
+
+    const dist = nearestDist < Infinity ? nearestDist : haversineYards(from, centroid);
+
+    if (dist > carry + 50 || dist < 20) continue;
 
     if (dist > bestDist) {
       bestDist = dist;
@@ -248,7 +270,7 @@ function computeCarryNote(
       if (clearance >= 0) {
         bestNote = `+${clearance}y past ${label}`;
       } else {
-        bestNote = `${clearance}y short of ${label}`;
+        bestNote = `~${Math.abs(clearance)}y short of ${label}`;
       }
     }
   }
@@ -296,20 +318,21 @@ function generateCaddyTip(
   const ballDir = club.meanOffline > 1 ? 'right' : club.meanOffline < -1 ? 'left' : null;
   const ballWorks = ballDir ? `works ${ballDir}` : null;
 
+  const aimBearing = bearingBetween(from, aimPos);
   interface NearbyHaz { desc: string; side: 'left' | 'right'; dist: number }
   const nearHaz: NearbyHaz[] = [];
   for (const h of hazards) {
     if (h.polygon.length < MIN_HAZARD_POINTS) continue;
     const c = polygonCentroid(h.polygon);
-    const distToTarget = haversineYards(target, c);
-    if (distToTarget > 50) continue;
+    const distToAim = haversineYards(aimPos, c);
+    if (distToAim > 50) continue;
 
-    const relAngle = normalizeAngle(bearingBetween(from, c) - shotBearing);
+    const relAngle = normalizeAngle(bearingBetween(from, c) - aimBearing);
     const side: 'left' | 'right' = relAngle >= 0 ? 'right' : 'left';
     nearHaz.push({
       desc: describeHazard(h, c, from, side, isApproach),
       side,
-      dist: distToTarget,
+      dist: distToAim,
     });
   }
 
@@ -450,8 +473,13 @@ export function generateNamedStrategies(
       ],
     });
 
-    // Aggressive: longest carry along center line — accept hazard risk (no findSafeLanding)
-    let aggTarget = centerLinePoint(cl, tee, longest.meanCarry, heading);
+    // Aggressive: longest carry along center line — smaller safety buffer (riskier but not suicidal)
+    let aggTarget = findSafeLanding(
+      centerLinePoint(cl, tee, longest.meanCarry, heading),
+      heading,
+      hole.hazards,
+      8,
+    );
     let aggClub1 = closestClub(haversineYards(tee, aggTarget), distributions)!;
 
     // Dedup: if same club and aim within 15y of conservative, try cutting toward pin

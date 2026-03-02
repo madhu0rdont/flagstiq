@@ -68,6 +68,47 @@ export function pointInPolygon(
   return inside;
 }
 
+/** Minimum distance in yards from a point to the nearest edge of a polygon.
+ *  Returns 0 if the point is inside the polygon. */
+export function distanceToPolygonEdge(
+  point: { lat: number; lng: number },
+  polygon: { lat: number; lng: number }[],
+): number {
+  if (polygon.length < 3) return Infinity;
+  if (pointInPolygon(point, polygon)) return 0;
+
+  const px = point.lng;
+  const py = point.lat;
+  const cosLat = Math.cos(toRad(point.lat));
+
+  let minDistSq = Infinity;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const ax = polygon[j].lng, ay = polygon[j].lat;
+    const bx = polygon[i].lng, by = polygon[i].lat;
+
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+
+    let t = 0;
+    if (lenSq > 0) {
+      t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    }
+
+    const nx = ax + t * dx;
+    const ny = ay + t * dy;
+
+    const eLng = (px - nx) * cosLat;
+    const eLat = py - ny;
+    minDistSq = Math.min(minDistSq, eLng * eLng + eLat * eLat);
+  }
+
+  const degDist = Math.sqrt(minDistSq);
+  const meters = degDist * (Math.PI / 180) * EARTH_RADIUS_M;
+  return meters * METERS_TO_YARDS;
+}
+
 /** Initial compass bearing (0-360) from point A to point B */
 export function bearingBetween(
   a: { lat: number; lng: number },

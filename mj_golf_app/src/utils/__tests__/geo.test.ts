@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { haversineYards, projectPoint, computeEllipsePoints, pointInPolygon, bearingBetween } from '../geo';
+import { haversineYards, projectPoint, computeEllipsePoints, pointInPolygon, bearingBetween, distanceToPolygonEdge } from '../geo';
 
 describe('projectPoint', () => {
   const origin = { lat: 33.0, lng: -117.0 };
@@ -151,5 +151,40 @@ describe('bearingBetween', () => {
     const reverse = bearingBetween(target, origin);
     const diff = Math.abs(forward - reverse);
     expect(Math.min(diff, 360 - diff)).toBeCloseTo(180, 0);
+  });
+});
+
+describe('distanceToPolygonEdge', () => {
+  // ~30 yard square polygon centered at (33.0, -117.0)
+  const square = [
+    { lat: 33.00015, lng: -117.00015 },
+    { lat: 33.00015, lng: -116.99985 },
+    { lat: 32.99985, lng: -116.99985 },
+    { lat: 32.99985, lng: -117.00015 },
+  ];
+
+  it('returns 0 for a point inside the polygon', () => {
+    expect(distanceToPolygonEdge({ lat: 33.0, lng: -117.0 }, square)).toBe(0);
+  });
+
+  it('returns positive distance for a point outside the polygon', () => {
+    // Point ~20 yards north of the polygon edge
+    const point = projectPoint({ lat: 33.00015, lng: -117.0 }, 0, 20);
+    const dist = distanceToPolygonEdge(point, square);
+    expect(dist).toBeGreaterThan(15);
+    expect(dist).toBeLessThan(25);
+  });
+
+  it('returns Infinity for degenerate polygons', () => {
+    expect(distanceToPolygonEdge({ lat: 33.0, lng: -117.0 }, [])).toBe(Infinity);
+    expect(distanceToPolygonEdge({ lat: 33.0, lng: -117.0 }, [{ lat: 33.0, lng: -117.0 }])).toBe(Infinity);
+  });
+
+  it('returns small distance for a point just outside the polygon', () => {
+    // Point ~5 yards east of the polygon edge
+    const point = projectPoint({ lat: 33.0, lng: -116.99985 }, 90, 5);
+    const dist = distanceToPolygonEdge(point, square);
+    expect(dist).toBeGreaterThan(2);
+    expect(dist).toBeLessThan(10);
   });
 });

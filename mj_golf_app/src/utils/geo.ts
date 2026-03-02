@@ -105,6 +105,54 @@ export function bezierPath(
   return pts;
 }
 
+/** Minimum distance in yards from a point to the nearest edge of a polygon.
+ *  Returns 0 if the point is inside the polygon. */
+export function distanceToPolygonEdge(
+  point: { lat: number; lng: number },
+  polygon: { lat: number; lng: number }[],
+): number {
+  if (polygon.length < 3) return Infinity;
+  if (pointInPolygon(point, polygon)) return 0;
+
+  // Approximate: find the minimum distance from the point to each polygon edge segment.
+  // Uses flat-earth approximation (accurate within a few yards at golf-course scale).
+  const px = point.lng;
+  const py = point.lat;
+  const cosLat = Math.cos(toRad(point.lat));
+
+  let minDistSq = Infinity;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const ax = polygon[j].lng, ay = polygon[j].lat;
+    const bx = polygon[i].lng, by = polygon[i].lat;
+
+    // Vector AB
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+
+    // Project point onto segment, clamped to [0, 1]
+    let t = 0;
+    if (lenSq > 0) {
+      t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    }
+
+    // Nearest point on segment
+    const nx = ax + t * dx;
+    const ny = ay + t * dy;
+
+    // Distance in degrees, scaled by cosLat for longitude
+    const eLng = (px - nx) * cosLat;
+    const eLat = py - ny;
+    minDistSq = Math.min(minDistSq, eLng * eLng + eLat * eLat);
+  }
+
+  // Convert degree distance to meters then yards
+  const degDist = Math.sqrt(minDistSq);
+  const meters = degDist * (Math.PI / 180) * EARTH_RADIUS_M;
+  return meters * METERS_TO_YARDS;
+}
+
 /** Generate polygon boundary for a rotated ellipse on the earth's surface.
  *  Semi-major axis aligned along bearingDeg (carry direction), semi-minor perpendicular. */
 export function computeEllipsePoints(
