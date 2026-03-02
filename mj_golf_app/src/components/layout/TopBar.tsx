@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router';
-import { ArrowLeft, Settings, Menu, X, Home, Briefcase, MapPin, HelpCircle, Plus, LogOut, User } from 'lucide-react';
+import { ArrowLeft, Settings, Menu, X, Home, Briefcase, MapPin, HelpCircle, Plus, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const PRIMARY_LINKS = [
