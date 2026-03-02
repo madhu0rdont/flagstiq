@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.1 — Split Fairways & Strategy Map Visuals
+- Split fairway support: `fairway` field is now `Coord[][]` (array of polygons) with auto-migration of legacy data
+- Admin editor: additive fairway drawing, per-polygon selection/edit/delete
+- Strategy map: per-shot dual lines — white dashed aim line + cyan curved ball flight showing draw/fade shape
+- Shot 2 arrow now correctly originates from shot 1's landing zone center (not aim position)
+- Bezier curve ball flight uses aim point as control point for accurate draw/fade visualization
+- Fix 404 on `/strategy/:courseId` direct navigation (missing route)
+
 ## v1.4.0 — Admin Deep Links, 9-Hole Support & Hardening
 - Admin page state (tab, course, hole) persisted in URL — refresh-safe, deep-linkable, browser back/forward works
 - 9-hole course support: KML parser auto-detects hole count, PDF/game plan/UI all handle variable hole counts
