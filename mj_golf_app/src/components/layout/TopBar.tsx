@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router';
-import { ArrowLeft, Settings, Menu, X, Home, Briefcase, MapPin, HelpCircle, Plus } from 'lucide-react';
+import { ArrowLeft, Settings, Menu, X, Home, Briefcase, MapPin, HelpCircle, Plus, LogOut, User } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const PRIMARY_LINKS = [
   { to: '/', icon: Home, label: 'Home' },
@@ -23,7 +24,24 @@ interface TopBarProps {
 export function TopBar({ title, showBack, rightAction }: TopBarProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const avatarRef = useRef<HTMLDivElement>(null);
+
+  // Close avatar dropdown on outside click
+  useEffect(() => {
+    if (!avatarOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+        setAvatarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [avatarOpen]);
+
+  const initials = (user?.displayName || user?.username || '?').slice(0, 2).toUpperCase();
 
   return (
     <>
@@ -48,8 +66,32 @@ export function TopBar({ title, showBack, rightAction }: TopBarProps) {
           )}
         </div>
         <h1 className="flex-1 text-center text-lg font-semibold text-text-dark">{title}</h1>
-        <div className="flex w-10 justify-end">
+        <div className="flex items-center gap-1 justify-end">
           {rightAction}
+          <div className="relative" ref={avatarRef}>
+            <button
+              onClick={() => setAvatarOpen(!avatarOpen)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
+              aria-label="User menu"
+            >
+              {initials}
+            </button>
+            {avatarOpen && (
+              <div className="absolute right-0 top-10 w-44 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                <div className="px-4 py-3 border-b border-border">
+                  <p className="text-sm font-semibold text-text-dark">{user?.displayName || user?.username}</p>
+                  <p className="text-xs text-text-muted">{user?.role}</p>
+                </div>
+                <button
+                  onClick={() => { setAvatarOpen(false); logout(); }}
+                  className="flex w-full items-center gap-2 px-4 py-3 text-sm text-coral hover:bg-surface transition-colors"
+                >
+                  <LogOut size={16} />
+                  Log Out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
