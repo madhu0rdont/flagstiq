@@ -16,6 +16,8 @@ import { Modal } from '../components/ui/Modal';
 import { Select } from '../components/ui/Select';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { LoadingPage } from '../components/ui/LoadingPage';
+import { Toggle } from '../components/ui/Toggle';
 
 export function SessionSummaryPage() {
   const { sessionId } = useParams();
@@ -160,12 +162,7 @@ export function SessionSummaryPage() {
   }
 
   if (!session || !shots || !club || !summary) {
-    return (
-      <>
-        <TopBar title="Session Summary" showBack />
-        <div className="px-4 py-8 text-center text-sm text-text-muted">Loading...</div>
-      </>
-    );
+    return <LoadingPage title="Session Summary" showBack />;
   }
 
   const dateStr = new Date(session.date).toLocaleDateString('en-US', {
@@ -240,26 +237,12 @@ export function SessionSummaryPage() {
 
         {/* Mishit Toggle */}
         {mishitCount > 0 && (
-          <div className="mb-3 flex items-center gap-2">
-            <button
-              onClick={() => setExcludeMishits(!excludeMishits)}
-              className={`relative h-5 w-9 rounded-full transition-colors ${
-                excludeMishits ? 'bg-primary' : 'bg-border'
-              }`}
-              role="switch"
-              aria-checked={excludeMishits}
-              aria-label="Exclude mishits"
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                  excludeMishits ? 'translate-x-4' : ''
-                }`}
-              />
-            </button>
-            <span className="text-xs text-text-medium">
-              Exclude mishits ({mishitCount})
-            </span>
-          </div>
+          <Toggle
+            checked={excludeMishits}
+            onChange={setExcludeMishits}
+            label={`Exclude mishits (${mishitCount})`}
+            className="mb-3"
+          />
         )}
 
         {/* Hero Metrics */}

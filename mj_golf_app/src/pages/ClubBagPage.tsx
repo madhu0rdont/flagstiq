@@ -51,7 +51,7 @@ export function ClubBagPage() {
         ) : (
           <>
             <p className="mb-3 text-xs text-text-muted">
-              {clubs.length} club{clubs.length !== 1 ? 's' : ''} — drag to reorder
+              {clubs.length} club{clubs.length !== 1 ? 's' : ''}{clubs.length > 1 ? ' — drag to reorder' : ''}
             </p>
             <ClubList clubs={clubs} />
             <Link to="/bag/new" className="mt-4 block">

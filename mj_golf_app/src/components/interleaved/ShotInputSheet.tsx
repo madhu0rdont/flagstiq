@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Toggle } from '../ui/Toggle';
 import type { Club } from '../../models/club';
 
 interface ShotInputSheetProps {
@@ -119,29 +120,12 @@ export function ShotInputSheet({ open, onClose, clubs, suggestedClubId, defaultF
         </div>
 
         {/* Full shot toggle */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setFullShot(!fullShot)}
-            className={`relative h-5 w-9 rounded-full transition-colors ${
-              fullShot ? 'bg-primary' : 'bg-border'
-            }`}
-            role="switch"
-            aria-checked={fullShot}
-            aria-label="Full shot"
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                fullShot ? 'translate-x-4' : ''
-              }`}
-            />
-          </button>
-          <span className="text-xs text-text-medium">
-            Full shot
-          </span>
-          <span className="text-[10px] text-text-faint">
-            (counts toward yardage book)
-          </span>
-        </div>
+        <Toggle
+          checked={fullShot}
+          onChange={setFullShot}
+          label="Full shot"
+          description="(counts toward yardage book)"
+        />
       </div>
 
       <div className="border-t border-border px-4 py-3">

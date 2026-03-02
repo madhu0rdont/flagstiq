@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { MultiClubTrajectoryChart } from './MultiClubTrajectoryChart';
 import { MultiClubDispersionChart } from './MultiClubDispersionChart';
 import { YardageSummaryTable } from './YardageSummaryTable';
+import { Toggle } from '../ui/Toggle';
 import { useYardageBookShots } from '../../hooks/useYardageBook';
 import { computeXScale } from '../flight/flight-math';
 import { buildDistributions } from '../../services/monte-carlo';
@@ -77,26 +78,11 @@ export function DetailsTab() {
         </p>
 
         {mishitCount > 0 && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setExcludeMishits(!excludeMishits)}
-              className={`relative h-5 w-9 rounded-full transition-colors ${
-                excludeMishits ? 'bg-primary' : 'bg-border'
-              }`}
-              role="switch"
-              aria-checked={excludeMishits}
-              aria-label="Exclude mishits"
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                  excludeMishits ? 'translate-x-4' : ''
-                }`}
-              />
-            </button>
-            <span className="text-xs text-text-medium">
-              Exclude mishits ({mishitCount})
-            </span>
-          </div>
+          <Toggle
+            checked={excludeMishits}
+            onChange={setExcludeMishits}
+            label={`Exclude mishits (${mishitCount})`}
+          />
         )}
       </div>
 

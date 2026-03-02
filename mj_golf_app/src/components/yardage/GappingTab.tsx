@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { GappingChart } from './GappingChart';
+import { Toggle } from '../ui/Toggle';
 import { useYardageBook, useYardageBookShots } from '../../hooks/useYardageBook';
 import { useAllClubs } from '../../hooks/useClubs';
 
@@ -59,26 +60,12 @@ export function GappingTab() {
         </p>
 
         {mishitCount > 0 && (
-          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-            <button
-              onClick={() => setExcludeMishits(!excludeMishits)}
-              className={`relative h-5 w-9 rounded-full transition-colors ${
-                excludeMishits ? 'bg-primary' : 'bg-border'
-              }`}
-              role="switch"
-              aria-checked={excludeMishits}
-              aria-label="Exclude mishits"
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                  excludeMishits ? 'translate-x-4' : ''
-                }`}
-              />
-            </button>
-            <span className="text-xs text-text-medium whitespace-nowrap">
-              Exclude mishits ({mishitCount})
-            </span>
-          </div>
+          <Toggle
+            checked={excludeMishits}
+            onChange={setExcludeMishits}
+            label={`Exclude mishits (${mishitCount})`}
+            className="flex-shrink-0 ml-3"
+          />
         )}
       </div>
       <div className="rounded-2xl border border-border bg-card shadow-sm p-3">

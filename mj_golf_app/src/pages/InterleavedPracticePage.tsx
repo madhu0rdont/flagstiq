@@ -638,9 +638,9 @@ export function InterleavedPracticePage() {
 
         {/* Early exit */}
         {!roundComplete && completedScores.length > 0 && (
-          <div className="mt-4">
+          <div className="mt-4 border-t border-border pt-3">
             <Button
-              variant="ghost"
+              variant="secondary"
               onClick={() => { setScorecardOpen(false); handleFinishRound(true); }}
               className="w-full"
               disabled={saving}

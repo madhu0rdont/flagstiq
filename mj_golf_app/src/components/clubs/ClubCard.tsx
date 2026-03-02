@@ -39,7 +39,7 @@ export function ClubCard({ club, dragHandleProps }: ClubCardProps) {
           </span>
         </div>
         <div className="mt-0.5 text-xs text-text-muted">
-          {[club.brand, club.model, club.name].filter(Boolean).join(' ')}
+          {[club.brand, club.model].filter(Boolean).join(' ')}
           {(club.flex || club.shaft) && ` with ${[club.flex, club.shaft].filter(Boolean).join(' ')}`}
         </div>
       </div>

@@ -161,7 +161,7 @@ export function StrategyPlannerPage() {
     return (
       <>
         <TopBar title="Course Management" />
-        <div className="px-4 py-3 pb-24">
+        <div className="px-4 py-3 pb-6">
           <div className="grid grid-cols-2 gap-3">
             {courses.map((c) => (
               <CourseCard key={c.id} course={c} onSelect={setCourseId} />
@@ -175,7 +175,7 @@ export function StrategyPlannerPage() {
   return (
     <>
       <TopBar title="Course Management" />
-      <div className="flex flex-col gap-3 px-4 py-3 pb-24">
+      <div className="flex flex-col gap-3 px-4 py-3 pb-6">
         {/* Course header with back button */}
         <button
           onClick={() => { setCourseId(undefined); setHoleNumber(1); }}

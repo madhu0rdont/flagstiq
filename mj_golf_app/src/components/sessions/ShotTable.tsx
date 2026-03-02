@@ -1,5 +1,5 @@
 import { Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { validateShotField } from '../../utils/validation';
 
 export interface ShotRow {
@@ -57,6 +57,13 @@ function ShotRowCard({
   readOnly?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    const timer = setTimeout(() => setConfirmingDelete(false), 3000);
+    return () => clearTimeout(timer);
+  }, [confirmingDelete]);
 
   const renderField = (field: (typeof CORE_FIELDS)[number]) => {
     const value = shot[field.key];
@@ -113,8 +120,20 @@ function ShotRowCard({
           {!readOnly && (
             <button
               type="button"
-              onClick={() => onDelete(index)}
-              className="rounded p-1 text-text-muted hover:text-coral"
+              onClick={() => {
+                if (confirmingDelete) {
+                  onDelete(index);
+                  setConfirmingDelete(false);
+                } else {
+                  setConfirmingDelete(true);
+                }
+              }}
+              className={`rounded p-1 transition-colors ${
+                confirmingDelete
+                  ? 'bg-coral/10 text-coral'
+                  : 'text-text-muted hover:text-coral'
+              }`}
+              title={confirmingDelete ? 'Tap again to delete' : 'Delete shot'}
             >
               <Trash2 size={14} />
             </button>
