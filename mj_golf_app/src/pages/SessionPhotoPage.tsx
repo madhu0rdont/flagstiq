@@ -46,6 +46,7 @@ export function SessionPhotoPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   if (!state?.clubId) {
     return (
@@ -106,6 +107,7 @@ export function SessionPhotoPage() {
     if (validShots.length === 0) return;
 
     setSaving(true);
+    setSaveError('');
     try {
       const sessionId = await createSession({
         clubId: state.clubId,
@@ -129,6 +131,8 @@ export function SessionPhotoPage() {
         })),
       });
       navigate(`/session/${sessionId}`, { replace: true });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save session');
     } finally {
       setSaving(false);
     }
@@ -176,6 +180,13 @@ export function SessionPhotoPage() {
                 Manual Entry
               </Button>
             </div>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral/30 bg-coral/5 px-3 py-2">
+            <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-coral" />
+            <p className="text-xs text-coral">{saveError}</p>
           </div>
         )}
 

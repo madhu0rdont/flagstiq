@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router';
 import { AppShell } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { LoadingPage } from './components/ui/LoadingPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { HomePage } from './pages/HomePage';
 import { ClubBagPage } from './pages/ClubBagPage';
 import { ClubEditPage } from './pages/ClubEditPage';
@@ -58,6 +59,7 @@ export const router = createBrowserRouter([
       { path: 'admin/import', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
       { path: 'admin/:courseId', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
       { path: 'admin/:courseId/:holeNumber', element: <Suspense fallback={<LoadingPage />}><AdminPage /></Suspense> },
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
 ]);

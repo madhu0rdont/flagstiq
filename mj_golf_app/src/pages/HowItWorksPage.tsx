@@ -365,7 +365,7 @@ export function HowItWorksPage() {
       <TopBar title="How It Works" showBack />
 
       {/* Sticky section nav */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-4 py-2">
+      <div className="sticky top-14 z-10 bg-surface/95 backdrop-blur-sm border-b border-border px-4 py-2">
         <div className="flex gap-1.5 overflow-x-auto">
           {SECTIONS.map((s) => (
             <a

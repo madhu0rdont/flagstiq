@@ -24,6 +24,7 @@ export function SessionCsvPage() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   if (!state?.clubId) {
     return (
@@ -95,6 +96,7 @@ export function SessionCsvPage() {
     if (validShots.length === 0) return;
 
     setSaving(true);
+    setSaveError('');
     try {
       const sessionId = await createSession({
         clubId: state.clubId,
@@ -118,6 +120,8 @@ export function SessionCsvPage() {
         })),
       });
       navigate(`/session/${sessionId}`, { replace: true });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save session');
     } finally {
       setSaving(false);
     }
@@ -175,6 +179,13 @@ export function SessionCsvPage() {
             <p className="mb-3 text-xs text-text-muted">Review and edit the data below, then save.</p>
 
             <ShotTable shots={shots} onChange={handleChange} onDelete={handleDelete} />
+
+            {saveError && (
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral/30 bg-coral/5 px-3 py-2">
+                <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-coral" />
+                <p className="text-xs text-coral">{saveError}</p>
+              </div>
+            )}
 
             <div className="mt-4 flex flex-col gap-2">
               <Button onClick={handleSave} disabled={saving} size="lg" className="w-full">

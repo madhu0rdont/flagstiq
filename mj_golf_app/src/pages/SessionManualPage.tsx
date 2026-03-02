@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Plus } from 'lucide-react';
+import { Plus, AlertCircle } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { ShotTable, type ShotRow } from '../components/sessions/ShotTable';
 import { Button } from '../components/ui/Button';
@@ -37,6 +37,7 @@ export function SessionManualPage() {
 
   const [shots, setShots] = useState<ShotRow[]>([emptyShot(1)]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   if (!state?.clubId) {
     return (
@@ -77,6 +78,7 @@ export function SessionManualPage() {
     if (validShots.length === 0) return;
 
     setSaving(true);
+    setSaveError('');
     try {
       const sessionId = await createSession({
         clubId: state.clubId,
@@ -100,6 +102,8 @@ export function SessionManualPage() {
         })),
       });
       navigate(`/session/${sessionId}`, { replace: true });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save session');
     } finally {
       setSaving(false);
     }
@@ -123,6 +127,13 @@ export function SessionManualPage() {
         <Button variant="secondary" onClick={addShot} className="mt-3 w-full">
           <Plus size={16} /> Add Shot
         </Button>
+
+        {saveError && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral/30 bg-coral/5 px-3 py-2">
+            <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-coral" />
+            <p className="text-xs text-coral">{saveError}</p>
+          </div>
+        )}
 
         <Button
           onClick={handleSave}
