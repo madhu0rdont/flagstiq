@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.5.1 — DP Optimizer Dogleg Fix & Test Coverage
+- Synthetic center line for doglegs: when `centerLine` is empty, `synthesizeCenterLine()` walks the fairway in 20y steps using a scored bearing fan (±75°) to avoid hazards
+- Approach threshold: plans now add a final approach shot when landing within the shortest club's carry distance (58-degree wedge), ensuring plans always reach the green
+- Greedy fallback in `extractPlan()`: missing policy entries or invalid club indices fall through to `greedyClub()` instead of breaking the plan early
+- Strategy diversity fix: different scoring modes now produce different first-shot clubs via `findAlternativeTeeAction()`
+- 31 new unit tests for `dp-optimizer.ts` covering zone discretization, dogleg integration, approach threshold, diversity enforcement, and edge cases (482 total tests)
+
+## v1.5.0 — DP/MDP Strategy Optimizer
+- Replace hardcoded strategy templates with Dynamic Programming / Markov Decision Process optimizer
+- Zone discretization along hole centerline with 3 lateral positions per interval
+- Transition sampling (200 Gaussian shots per action) shared across all 3 scoring modes
+- Value iteration with mode-specific objectives: Scoring (expected strokes), Safe (risk-adjusted), Aggressive (birdie hunt)
+- Policy extraction with Monte Carlo simulation (2,000 trials) for accurate score distributions
+- How It Works page updated with DP/MDP documentation
+
 ## v1.4.1 — Split Fairways & Strategy Map Visuals
 - Split fairway support: `fairway` field is now `Coord[][]` (array of polygons) with auto-migration of legacy data
 - Admin editor: additive fairway drawing, per-polygon selection/edit/delete
