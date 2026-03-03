@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5.8 — Security Hardening
+- Sanitize external API error responses — no Anthropic internals or stack traces leaked to clients
+- Global write rate limiter: 200 requests per 15 minutes on all mutating endpoints (POST/PUT/PATCH/DELETE)
+- Fix user creation race condition: rely on DB UNIQUE constraints instead of pre-check SELECTs (eliminates TOCTOU window)
+- Zod validation on shots query params (`since`, `clubId`, `limit`) and wedge-override PUT body
+- Multer file filter restricts KML uploads to `.kml` extension or KML/XML MIME types (5MB limit, down from 10MB)
+- Suppress `console.error` in production ErrorBoundary
+- Reduce session cookie maxAge from 30 days to 7 days
+- Stricter email validation with RFC 5322-based regex (requires 2+ char TLD, valid domain labels)
+
 ## v1.5.7 — Dogleg Tee Bearing Fix
 - Fix DP optimizer bearing selection on dogleg holes: tee bearing now looks 200 yards ahead on the center line (driver landing zone) instead of only 20 yards, so the ±30° bearing fan is centered on where drives actually land
 - On doglegs, the first 20y of the hole is straight — the curve happens at 150-250y. The old 20y look-ahead centered the bearing fan on the pre-curve direction, causing the optimizer to miss fairway-following bearings entirely on sharp doglegs
