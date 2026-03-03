@@ -113,6 +113,7 @@ export function useHoleStrategy(
   aimPoints: AimPoint[];
   shotCount: number;
   isLoading: boolean;
+  regenerate: () => Promise<unknown>;
 } {
   // Still use local shot count for gating the "Run Sim" button
   const shotGroups = useYardageBookShots();
@@ -125,7 +126,7 @@ export function useHoleStrategy(
 
   // Fetch strategies from server via POST (SWR with a stable key)
   const swrKey = enabled && hole ? `strategy:${hole.courseId}:${hole.holeNumber}:${teeBox}` : null;
-  const { data, isLoading: isStrategyLoading } = useSWR<StrategyResponse>(
+  const { data, isLoading: isStrategyLoading, mutate: mutateStrategy } = useSWR<StrategyResponse>(
     swrKey,
     () => api.post<StrategyResponse>('/strategy/hole', {
       courseId: hole!.courseId,
@@ -180,5 +181,6 @@ export function useHoleStrategy(
     aimPoints,
     shotCount: totalShotCount,
     isLoading,
+    regenerate: mutateStrategy,
   };
 }

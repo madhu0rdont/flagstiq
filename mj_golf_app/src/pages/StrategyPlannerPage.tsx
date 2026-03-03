@@ -91,8 +91,9 @@ export function StrategyPlannerPage() {
   const hole = course?.holes.find((h) => h.holeNumber === holeNumber);
   const totalHoles = course?.holes.length ?? 18;
 
-  const { strategies, landingZones, aimPoints, shotCount } =
+  const { strategies, landingZones, aimPoints, shotCount, regenerate } =
     useHoleStrategy(hole, teeBox, showSim, selectedStrategyIdx);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Build distributions for GamePlanView landing zone rendering
   const shotGroups = useYardageBookShots();
@@ -238,7 +239,7 @@ export function StrategyPlannerPage() {
               <>
                 <HoleInfoPanel hole={hole} teeBox={teeBox} allHoles={course!.holes} isKeyHole={keyHoleSet.has(holeNumber)} />
 
-                {/* Sim toggle + Scoring/Safe */}
+                {/* Sim toggle + Regenerate */}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => shotCount > 0 && setShowSim((s) => !s)}
@@ -254,6 +255,26 @@ export function StrategyPlannerPage() {
                   >
                     {showSim ? 'Sim On' : 'Run Sim'}
                   </button>
+                  {showSim && (
+                    <button
+                      onClick={async () => {
+                        setIsRegenerating(true);
+                        await regenerate();
+                        setIsRegenerating(false);
+                      }}
+                      disabled={isRegenerating}
+                      className="rounded-lg px-3 py-2 text-sm font-medium bg-surface text-text-dark border border-border hover:border-primary hover:text-primary transition-all disabled:opacity-50"
+                    >
+                      {isRegenerating ? (
+                        <span className="flex items-center gap-1.5">
+                          <span className="animate-spin h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full inline-block" />
+                          Regenerating
+                        </span>
+                      ) : (
+                        'Regenerate'
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {showSim && (

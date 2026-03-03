@@ -49,6 +49,7 @@ app.use(csrfCheck);
 
 // Health checks (unauthenticated)
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
 app.get('/ready', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
