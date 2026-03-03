@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.5.5 — Fairway-Aware Bearing Selection
+- Finer bearing resolution: `BEARING_STEP` reduced from 5° to 2° (31 bearings per zone instead of 13), enabling the optimizer to resolve narrow fairway windows
+- Lie cascade correction: rough landings now penalized for cascading effects (wider dispersion from `ROUGH_LIE_MULTIPLIER` leading to more rough on subsequent shots), preventing the optimizer from favoring rough-landing bearings with better approach distances
+- Tracks `pFairway` per action in transition sampling to inform lie cascade correction
+- Fixes TCC Primrose Hole 7: aim point fairway rate jumps from 14% to 57%, optimizer now correctly targets fairway-hitting bearings
+
+## v1.5.4 — Fairway-Aware Strategy Optimizer
+- Implicit rough penalty: shots landing outside fairway/green/hazard polygons now incur the rough penalty from settings (default 0.3 strokes)
+- Rough penalty loaded from `hazard_penalties` DB table — configurable via Admin > Hazard Penalties
+- Optimizer now strongly favors landing on defined fairway polygons, producing realistic golf strategies
+- Threaded rough penalty through all code paths: DP optimizer, MC simulation, game plan generation, and plan regeneration
+
 ## v1.5.3 — Rules of Golf Hazard Drop Logic
 - OB drops now land at the boundary entry point (binary search along trajectory, 2y offset) instead of 5y backward from inside OB — prevents cascading penalties from balls dropped in unplayable positions
 - Bunker balls stay in place (penalty represents shot difficulty, not a re-drop)

@@ -46,6 +46,8 @@ interface TransitionResult {
   penaltyVariance: number;
   /** probability of landing on or near the green in this shot */
   pGreen: number;
+  /** probability of landing on the fairway (no penalty, not green) */
+  pFairway: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +56,7 @@ interface TransitionResult {
 
 const ZONE_INTERVAL = 20;        // yards between zone markers along centerline
 const LATERAL_OFFSET = 20;       // yards left/right of centerline
-const BEARING_STEP = 5;          // degrees
+const BEARING_STEP = 2;          // degrees (finer resolution for narrow fairway windows)
 const BEARING_RANGE = 30;        // ±degrees from pin bearing
 const SAMPLES_PER_ACTION = 200;
 const GREEN_RADIUS = 10;         // yards — terminal zone threshold
@@ -332,6 +334,7 @@ function sampleTransitions(
   let totalPenalty = 0;
   let totalPenaltySq = 0;
   let greenCount = 0;
+  let fairwayCount = 0;
 
   const lieMultiplier = zone.lie === 'rough' ? ROUGH_LIE_MULTIPLIER : 1.0;
 
@@ -367,6 +370,7 @@ function sampleTransitions(
       greenCount++;
       counts.set(greenZoneId, (counts.get(greenZoneId) ?? 0) + 1);
     } else {
+      if (penalty === 0) fairwayCount++;
       const zoneId = findNearestZone(landing, zones);
       counts.set(zoneId, (counts.get(zoneId) ?? 0) + 1);
     }
@@ -386,6 +390,7 @@ function sampleTransitions(
     expectedPenalty: expectedPenaltyVal,
     penaltyVariance: Math.max(0, penaltyVariance),
     pGreen: greenCount / n,
+    pFairway: fairwayCount / n,
   };
 }
 
@@ -453,6 +458,7 @@ function valueIteration(
   mode: ScoringMode,
   par: number,
   distributions: ClubDistribution[],
+  roughPenalty: number,
 ): ValueIterationResult {
   const pin = zones[zones.length - 1].position;
 
@@ -506,7 +512,7 @@ function valueIteration(
       let bestEntry: TransitionTableEntry | undefined;
 
       for (const entry of actions) {
-        const { transitions, expectedPenalty, penaltyVariance, pGreen } = entry.result;
+        const { transitions, expectedPenalty, penaltyVariance, pGreen, pFairway } = entry.result;
 
         // Compute expected future value
         let ev = 0;
@@ -517,7 +523,11 @@ function valueIteration(
           evSq += prob * futureV * futureV;
         }
 
-        const actionValue = 1 + expectedPenalty + ev;
+        // Lie cascade correction: rough landings inherit optimistic zone V-values
+        // that assume fairway lies. Account for cascading rough effects (wider
+        // dispersion from ROUGH_LIE_MULTIPLIER leading to more rough on subsequent shots).
+        const lieCascade = roughPenalty * (1 - pFairway - pGreen);
+        const actionValue = 1 + expectedPenalty + lieCascade + ev;
 
         let modeValue: number;
         if (mode === 'scoring') {
@@ -544,13 +554,13 @@ function valueIteration(
 
       if (bestEntry) {
         const oldV = V.get(zone.id) ?? 10;
-        // Store the actual expected strokes (not mode-adjusted) as the value
-        // but use mode value for policy selection
+        // Store expected strokes including lie cascade correction
         let actualEV = 0;
         for (const [zId, prob] of bestEntry.result.transitions) {
           actualEV += prob * (V.get(zId) ?? 10);
         }
-        const newV = 1 + bestEntry.result.expectedPenalty + actualEV;
+        const bestLieCascade = roughPenalty * (1 - bestEntry.result.pFairway - bestEntry.result.pGreen);
+        const newV = 1 + bestEntry.result.expectedPenalty + bestLieCascade + actualEV;
 
         maxDelta = Math.max(maxDelta, Math.abs(newV - oldV));
         V.set(zone.id, newV);
@@ -582,6 +592,7 @@ function findAlternativeTeeAction(
   par: number,
   excludeClubs: Set<string>,
   distributions: ClubDistribution[],
+  roughPenalty: number,
 ): { clubIdx: number; bearing: number } | null {
   const teeZone = zones[0];
   const teeActions = table.filter((e) => e.key.zoneId === teeZone.id);
@@ -593,7 +604,7 @@ function findAlternativeTeeAction(
     // Skip clubs that are already used by earlier strategies
     if (excludeClubs.has(entry.club.clubName)) continue;
 
-    const { transitions, expectedPenalty, penaltyVariance, pGreen } = entry.result;
+    const { transitions, expectedPenalty, penaltyVariance, pGreen, pFairway } = entry.result;
 
     // Compute expected future value
     let ev = 0;
@@ -604,7 +615,8 @@ function findAlternativeTeeAction(
       evSq += prob * futureV * futureV;
     }
 
-    const actionValue = 1 + expectedPenalty + ev;
+    const lieCascade = roughPenalty * (1 - pFairway - pGreen);
+    const actionValue = 1 + expectedPenalty + lieCascade + ev;
 
     let modeValue: number;
     if (mode === 'scoring') {
@@ -929,7 +941,7 @@ export function dpOptimizeHole(
 
   // 3. Value iteration for all modes
   for (const mode of modes) {
-    const { policy, values } = valueIteration(zones, table, mode, hole.par, distributions);
+    const { policy, values } = valueIteration(zones, table, mode, hole.par, distributions, roughPenalty);
     policies.push(policy);
     allValues.push(values);
   }
@@ -953,7 +965,7 @@ export function dpOptimizeHole(
       // Find alternative tee action for this mode
       const alt = findAlternativeTeeAction(
         zones, table, allValues[i], modes[i], hole.par,
-        usedFirstClubs, distributions,
+        usedFirstClubs, distributions, roughPenalty,
       );
       if (alt) {
         plans[i] = extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i], alt);
