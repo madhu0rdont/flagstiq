@@ -128,7 +128,7 @@ async function start() {
   // IMPORTANT: Only bump OPTIMIZER_VERSION when the DP optimizer / MC simulation
   // / game-plan logic actually changes. Package version bumps alone should NOT
   // trigger costly regeneration that blocks the event loop for minutes.
-  const OPTIMIZER_VERSION = '1.5.5'; // last optimizer-affecting change
+  const OPTIMIZER_VERSION = '1.5.6'; // last optimizer-affecting change
   try {
     const { rows } = await pool.query(
       `SELECT value FROM app_settings WHERE key = 'optimizer_version'`,
