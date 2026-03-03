@@ -25,8 +25,6 @@ import coursesRouter from './routes/courses.js';
 import adminRouter from './routes/admin.js';
 import gamePlansRouter, { markPlansStale } from './routes/game-plans.js';
 import strategyRouter from './routes/strategy.js';
-import { readFileSync } from 'fs';
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001');
@@ -126,22 +124,24 @@ async function start() {
   await migrate();
   await seed();
 
-  // Auto-regenerate game plans when optimizer version changes
+  // Auto-regenerate game plans when optimizer version changes.
+  // IMPORTANT: Only bump OPTIMIZER_VERSION when the DP optimizer / MC simulation
+  // / game-plan logic actually changes. Package version bumps alone should NOT
+  // trigger costly regeneration that blocks the event loop for minutes.
+  const OPTIMIZER_VERSION = '1.5.5'; // last optimizer-affecting change
   try {
-    const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
-    const appVersion = pkg.version as string;
     const { rows } = await pool.query(
       `SELECT value FROM app_settings WHERE key = 'optimizer_version'`,
     );
     const dbVersion = rows[0]?.value;
-    if (dbVersion !== appVersion) {
-      logger.info(`Optimizer version changed: ${dbVersion ?? 'none'} → ${appVersion}, marking plans stale`);
+    if (dbVersion !== OPTIMIZER_VERSION) {
+      logger.info(`Optimizer version changed: ${dbVersion ?? 'none'} → ${OPTIMIZER_VERSION}, marking plans stale`);
       await pool.query(
         `INSERT INTO app_settings (key, value) VALUES ('optimizer_version', $1)
          ON CONFLICT (key) DO UPDATE SET value = $1`,
-        [appVersion],
+        [OPTIMIZER_VERSION],
       );
-      await markPlansStale(`Optimizer updated to ${appVersion}`);
+      await markPlansStale(`Optimizer updated to ${OPTIMIZER_VERSION}`);
     }
   } catch {
     // app_settings table may not exist yet — create it
@@ -151,13 +151,11 @@ async function start() {
         value TEXT NOT NULL
       )
     `);
-    const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
     await pool.query(
       `INSERT INTO app_settings (key, value) VALUES ('optimizer_version', $1)
        ON CONFLICT (key) DO UPDATE SET value = $1`,
-      [pkg.version],
+      [OPTIMIZER_VERSION],
     );
-    await markPlansStale(`Optimizer updated to ${pkg.version}`);
   }
 
   app.listen(PORT, '0.0.0.0', () => {

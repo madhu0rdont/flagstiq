@@ -51,6 +51,9 @@ export async function regenerateStalePlans() {
       }
 
       for (const row of userPlans) {
+        // Yield event loop between plans so HTTP requests can be served
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         const courseId = row.course_id as string;
         const teeBox = row.tee_box as string;
         const mode = row.mode as string;
