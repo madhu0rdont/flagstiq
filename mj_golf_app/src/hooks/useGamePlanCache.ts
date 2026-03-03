@@ -2,9 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { fetcher } from '../lib/fetcher';
 import { api } from '../lib/api';
-import { generateGamePlan } from '../services/game-plan';
 import type { GamePlan } from '../services/game-plan';
-import type { ClubDistribution } from '../services/monte-carlo';
 import type { CourseWithHoles } from '../models/course';
 
 interface CachedPlanRow {
@@ -22,7 +20,6 @@ interface CachedPlanRow {
 export function useGamePlanCache(
   course: CourseWithHoles | undefined,
   teeBox: string,
-  distributions: ClubDistribution[],
 ) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
@@ -53,18 +50,14 @@ export function useGamePlanCache(
   const cacheAge = data?.updatedAt ? Date.now() - data.updatedAt : null;
 
   const generate = useCallback(async () => {
-    if (!course || distributions.length === 0) return;
+    if (!course) return;
 
     setIsGenerating(true);
     setProgress({ current: 0, total: course.holes.length });
 
     try {
-      const plan = await generateGamePlan(course, teeBox, distributions, (current, total) => {
-        setProgress({ current, total });
-      });
-
-      // Save to server
-      await api.put(`/game-plans/${course.id}/${teeBox}/scoring`, { plan });
+      // Generate plan on server (DP optimizer)
+      await api.post(`/game-plans/${course.id}/${teeBox}/scoring/generate`, {});
 
       // Revalidate SWR cache
       if (cacheKey) {
@@ -74,7 +67,7 @@ export function useGamePlanCache(
       setIsGenerating(false);
       setProgress(null);
     }
-  }, [course, teeBox, distributions, cacheKey]);
+  }, [course, teeBox, cacheKey]);
 
   return {
     gamePlan,

@@ -24,6 +24,7 @@ import wedgeOverridesRouter from './routes/wedge-overrides.js';
 import coursesRouter from './routes/courses.js';
 import adminRouter from './routes/admin.js';
 import gamePlansRouter from './routes/game-plans.js';
+import strategyRouter from './routes/strategy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -100,6 +101,7 @@ app.use('/api/shots', requirePlayer, shotsRouter);
 app.use('/api/backup', requirePlayer, backupRouter);
 app.use('/api/wedge-overrides', requirePlayer, wedgeOverridesRouter);
 app.use('/api/game-plans', requirePlayer, gamePlansRouter);
+app.use('/api/strategy', requirePlayer, strategyRouter);
 
 // Shared routes (any authenticated user)
 app.use('/api/courses', coursesRouter);

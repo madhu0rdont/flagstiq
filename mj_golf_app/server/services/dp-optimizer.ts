@@ -1,0 +1,729 @@
+import { expectedPutts } from './monte-carlo.js';
+import type { ClubDistribution } from './monte-carlo.js';
+import type { CourseHole } from '../models/types.js';
+import { projectPoint, haversineYards, pointInPolygon, bearingBetween } from './geo.js';
+import {
+  gaussianSample,
+  greedyClub,
+  checkHazards,
+  checkTreeTrajectory,
+  compensateForBias,
+  computeCarryNote,
+  generateCaddyTip,
+  computeScoreDistribution,
+  HOLE_THRESHOLD,
+  MAX_SHOTS_PER_HOLE,
+  DEFAULT_TRIALS,
+} from './strategy-optimizer.js';
+import type { OptimizedStrategy, NamedStrategyPlan, AimPoint } from './strategy-optimizer.js';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type ScoringMode = 'scoring' | 'safe' | 'aggressive';
+
+interface Zone {
+  id: number;
+  position: { lat: number; lng: number };
+  lie: 'fairway' | 'rough' | 'green';
+  distToPin: number;
+  isTerminal: boolean;
+}
+
+interface PolicyEntry {
+  clubIdx: number;    // index into distributions
+  bearingIdx: number; // index into aim bearings array
+  bearing: number;    // absolute compass bearing
+  value: number;
+}
+
+interface TransitionResult {
+  /** zone id → probability */
+  transitions: Map<number, number>;
+  expectedPenalty: number;
+  penaltyVariance: number;
+  /** probability of landing on or near the green in this shot */
+  pGreen: number;
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const ZONE_INTERVAL = 20;        // yards between zone markers along centerline
+const LATERAL_OFFSET = 20;       // yards left/right of centerline
+const BEARING_STEP = 5;          // degrees
+const BEARING_RANGE = 30;        // ±degrees from pin bearing
+const SAMPLES_PER_ACTION = 200;
+const GREEN_RADIUS = 10;         // yards — terminal zone threshold
+const ROUGH_LIE_MULTIPLIER = 1.15; // rough increases std by 15%
+const MAX_VALUE_ITERATIONS = 50;
+const CONVERGENCE_THRESHOLD = 0.001;
+const MIN_CARRY_RATIO = 0.5;     // club carry must be ≥ 50% of dist to pin
+const MAX_CARRY_RATIO = 1.2;     // club carry must be ≤ 120% of dist to pin
+
+const MODE_LABELS: Record<ScoringMode, { name: string; type: 'scoring' | 'safe' | 'balanced' }> = {
+  scoring: { name: 'Optimal Scoring', type: 'scoring' },
+  safe: { name: 'Risk-Averse', type: 'safe' },
+  aggressive: { name: 'Birdie Hunt', type: 'balanced' },
+};
+
+// ---------------------------------------------------------------------------
+// Zone Discretization
+// ---------------------------------------------------------------------------
+
+export function discretizeHole(
+  hole: CourseHole,
+  teeBox: string,
+): Zone[] {
+  const tee = { lat: hole.tee.lat, lng: hole.tee.lng };
+  const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
+  const heading = bearingBetween(tee, pin);
+  const totalDist = hole.playsLikeYards?.[teeBox] ?? hole.yardages[teeBox] ?? Object.values(hole.yardages)[0] ?? 0;
+  if (totalDist === 0) return [];
+
+  const centerLine = hole.centerLine ?? [];
+  const fairwayPolygons = hole.fairway ?? [];
+  const greenPoly = hole.green ?? [];
+  const zones: Zone[] = [];
+
+  // Tee zone
+  zones.push({
+    id: 0,
+    position: tee,
+    lie: 'fairway',
+    distToPin: totalDist,
+    isTerminal: false,
+  });
+
+  // Walk centerline in intervals
+  for (let d = ZONE_INTERVAL; d < totalDist - GREEN_RADIUS; d += ZONE_INTERVAL) {
+    const centerPos = interpolateCenterLine(centerLine, tee, heading, d);
+    const localBearing = d + ZONE_INTERVAL < totalDist
+      ? bearingBetween(centerPos, interpolateCenterLine(centerLine, tee, heading, d + ZONE_INTERVAL))
+      : heading;
+
+    for (const lateralDir of [0, -1, 1]) {
+      const pos = lateralDir === 0
+        ? centerPos
+        : projectPoint(centerPos, localBearing + 90, lateralDir * LATERAL_OFFSET);
+
+      const lie = classifyLie(pos, fairwayPolygons, greenPoly);
+      const distToPin = haversineYards(pos, pin);
+
+      zones.push({
+        id: zones.length,
+        position: pos,
+        lie,
+        distToPin,
+        isTerminal: false,
+      });
+    }
+  }
+
+  // Green zone (terminal)
+  zones.push({
+    id: zones.length,
+    position: pin,
+    lie: 'green',
+    distToPin: 0,
+    isTerminal: true,
+  });
+
+  return zones;
+}
+
+function interpolateCenterLine(
+  centerLine: { lat: number; lng: number }[],
+  tee: { lat: number; lng: number },
+  fallbackBearing: number,
+  targetDist: number,
+): { lat: number; lng: number } {
+  if (centerLine.length < 2) {
+    return projectPoint(tee, fallbackBearing, targetDist);
+  }
+
+  let cumDist = 0;
+  let prev = centerLine[0];
+  for (let i = 1; i < centerLine.length; i++) {
+    const segDist = haversineYards(prev, centerLine[i]);
+    if (cumDist + segDist >= targetDist) {
+      const remaining = targetDist - cumDist;
+      const fraction = segDist > 0 ? remaining / segDist : 0;
+      return {
+        lat: prev.lat + (centerLine[i].lat - prev.lat) * fraction,
+        lng: prev.lng + (centerLine[i].lng - prev.lng) * fraction,
+      };
+    }
+    cumDist += segDist;
+    prev = centerLine[i];
+  }
+
+  return projectPoint(prev, fallbackBearing, targetDist - cumDist);
+}
+
+function classifyLie(
+  pos: { lat: number; lng: number },
+  fairwayPolygons: { lat: number; lng: number }[][],
+  greenPoly: { lat: number; lng: number }[],
+): 'fairway' | 'rough' | 'green' {
+  if (greenPoly.length >= 3 && pointInPolygon(pos, greenPoly)) return 'green';
+  for (const fw of fairwayPolygons) {
+    if (fw.length >= 3 && pointInPolygon(pos, fw)) return 'fairway';
+  }
+  return 'rough';
+}
+
+// ---------------------------------------------------------------------------
+// Zone Lookup
+// ---------------------------------------------------------------------------
+
+function findNearestZone(
+  point: { lat: number; lng: number },
+  zones: Zone[],
+): number {
+  let bestId = 0;
+  let bestDist = Infinity;
+  for (const z of zones) {
+    const d = haversineYards(point, z.position);
+    if (d < bestDist) {
+      bestDist = d;
+      bestId = z.id;
+    }
+  }
+  return bestId;
+}
+
+// ---------------------------------------------------------------------------
+// Action Space
+// ---------------------------------------------------------------------------
+
+function getEligibleClubs(
+  zone: Zone,
+  distributions: ClubDistribution[],
+): ClubDistribution[] {
+  if (zone.isTerminal) return [];
+  const dist = zone.distToPin;
+  return distributions.filter((c) =>
+    c.meanCarry >= dist * MIN_CARRY_RATIO && c.meanCarry <= dist * MAX_CARRY_RATIO,
+  );
+}
+
+function getAimBearings(
+  zone: Zone,
+  pin: { lat: number; lng: number },
+): number[] {
+  const pinBearing = bearingBetween(zone.position, pin);
+  const bearings: number[] = [];
+  for (let offset = -BEARING_RANGE; offset <= BEARING_RANGE; offset += BEARING_STEP) {
+    bearings.push((pinBearing + offset + 360) % 360);
+  }
+  return bearings;
+}
+
+// ---------------------------------------------------------------------------
+// Transition Sampling
+// ---------------------------------------------------------------------------
+
+function sampleTransitions(
+  zone: Zone,
+  club: ClubDistribution,
+  bearing: number,
+  hole: CourseHole,
+  zones: Zone[],
+  greenZoneId: number,
+): TransitionResult {
+  const counts = new Map<number, number>();
+  let totalPenalty = 0;
+  let totalPenaltySq = 0;
+  let greenCount = 0;
+
+  const lieMultiplier = zone.lie === 'rough' ? ROUGH_LIE_MULTIPLIER : 1.0;
+
+  for (let i = 0; i < SAMPLES_PER_ACTION; i++) {
+    const carry = gaussianSample(club.meanCarry, club.stdCarry * lieMultiplier);
+    const offline = gaussianSample(club.meanOffline, club.stdOffline * lieMultiplier);
+
+    let landing = projectPoint(zone.position, bearing, carry);
+    if (Math.abs(offline) > 0.5) {
+      landing = projectPoint(landing, bearing + 90, offline);
+    }
+
+    let penalty = 0;
+
+    // Tree collision
+    const treeHit = checkTreeTrajectory(zone.position, bearing, carry, hole.hazards, club);
+    if (treeHit.hitTrees) {
+      landing = projectPoint(zone.position, bearing, treeHit.hitDistance);
+      penalty += 0.5;
+    }
+
+    // Hazard check
+    const hazResult = checkHazards(landing, hole.hazards);
+    if (hazResult.inHazard) {
+      penalty += hazResult.penalty;
+      landing = projectPoint(landing, bearingBetween(landing, zone.position), 5);
+    }
+
+    totalPenalty += penalty;
+    totalPenaltySq += penalty * penalty;
+
+    // Check if landing is on/near the green
+    const distToPin = haversineYards(landing, hole.pin);
+    if (distToPin <= GREEN_RADIUS) {
+      greenCount++;
+      counts.set(greenZoneId, (counts.get(greenZoneId) ?? 0) + 1);
+    } else {
+      const zoneId = findNearestZone(landing, zones);
+      counts.set(zoneId, (counts.get(zoneId) ?? 0) + 1);
+    }
+  }
+
+  const n = SAMPLES_PER_ACTION;
+  const transitions = new Map<number, number>();
+  for (const [zoneId, count] of counts) {
+    transitions.set(zoneId, count / n);
+  }
+
+  const expectedPenaltyVal = totalPenalty / n;
+  const penaltyVariance = totalPenaltySq / n - expectedPenaltyVal * expectedPenaltyVal;
+
+  return {
+    transitions,
+    expectedPenalty: expectedPenaltyVal,
+    penaltyVariance: Math.max(0, penaltyVariance),
+    pGreen: greenCount / n,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Transition Table (precomputed for all zone-action pairs)
+// ---------------------------------------------------------------------------
+
+interface ActionKey {
+  zoneId: number;
+  clubIdx: number;
+  bearingIdx: number;
+}
+
+interface TransitionTableEntry {
+  key: ActionKey;
+  club: ClubDistribution;
+  bearing: number;
+  result: TransitionResult;
+}
+
+function buildTransitionTable(
+  zones: Zone[],
+  distributions: ClubDistribution[],
+  hole: CourseHole,
+): TransitionTableEntry[] {
+  const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
+  const greenZoneId = zones[zones.length - 1].id;
+  const entries: TransitionTableEntry[] = [];
+
+  for (const zone of zones) {
+    if (zone.isTerminal) continue;
+
+    const clubs = getEligibleClubs(zone, distributions);
+    const bearings = getAimBearings(zone, pin);
+
+    for (let ci = 0; ci < clubs.length; ci++) {
+      for (let bi = 0; bi < bearings.length; bi++) {
+        const result = sampleTransitions(zone, clubs[ci], bearings[bi], hole, zones, greenZoneId);
+        entries.push({
+          key: { zoneId: zone.id, clubIdx: ci, bearingIdx: bi },
+          club: clubs[ci],
+          bearing: bearings[bi],
+          result,
+        });
+      }
+    }
+  }
+
+  return entries;
+}
+
+// ---------------------------------------------------------------------------
+// Value Iteration
+// ---------------------------------------------------------------------------
+
+function valueIteration(
+  zones: Zone[],
+  table: TransitionTableEntry[],
+  mode: ScoringMode,
+  par: number,
+): Map<number, PolicyEntry> {
+  const pin = zones[zones.length - 1].position;
+
+  // Initialize values
+  const V = new Map<number, number>();
+  for (const z of zones) {
+    if (z.isTerminal) {
+      V.set(z.id, expectedPutts(0)); // on the green, 0 yards from pin
+    } else {
+      V.set(z.id, 10); // pessimistic initial
+    }
+  }
+
+  // Track best action per zone
+  const policy = new Map<number, PolicyEntry>();
+
+  // Group table entries by zone for fast lookup
+  const byZone = new Map<number, TransitionTableEntry[]>();
+  for (const entry of table) {
+    const list = byZone.get(entry.key.zoneId) ?? [];
+    list.push(entry);
+    byZone.set(entry.key.zoneId, list);
+  }
+
+  for (let iter = 0; iter < MAX_VALUE_ITERATIONS; iter++) {
+    let maxDelta = 0;
+
+    for (const zone of zones) {
+      if (zone.isTerminal) continue;
+
+      const actions = byZone.get(zone.id);
+      if (!actions || actions.length === 0) {
+        // No eligible clubs — use greedy fallback
+        const chipDist = haversineYards(zone.position, pin);
+        const chipValue = 1 + expectedPutts(chipDist);
+        V.set(zone.id, chipValue);
+        continue;
+      }
+
+      let bestValue = Infinity;
+      let bestEntry: TransitionTableEntry | undefined;
+
+      for (const entry of actions) {
+        const { transitions, expectedPenalty, penaltyVariance, pGreen } = entry.result;
+
+        // Compute expected future value
+        let ev = 0;
+        let evSq = 0;
+        for (const [zId, prob] of transitions) {
+          const futureV = V.get(zId) ?? 10;
+          ev += prob * futureV;
+          evSq += prob * futureV * futureV;
+        }
+
+        const actionValue = 1 + expectedPenalty + ev;
+
+        let modeValue: number;
+        if (mode === 'scoring') {
+          // Pure expected strokes minimization
+          modeValue = actionValue;
+        } else if (mode === 'safe') {
+          // Risk-adjusted: penalize variance
+          const futureVariance = evSq - ev * ev;
+          const totalStd = Math.sqrt(Math.max(0, penaltyVariance + futureVariance));
+          modeValue = actionValue + 0.5 * totalStd;
+        } else {
+          // Aggressive: reward birdie potential
+          // Estimate P(birdie): P(finishing in ≤ par-1 total strokes from here)
+          // Approximate: lower expected strokes increases birdie chance, bonus for green reach
+          const birdieBonus = pGreen * 0.3; // reaching green gives better birdie odds
+          modeValue = actionValue - birdieBonus;
+        }
+
+        if (modeValue < bestValue) {
+          bestValue = modeValue;
+          bestEntry = entry;
+        }
+      }
+
+      if (bestEntry) {
+        const oldV = V.get(zone.id) ?? 10;
+        // Store the actual expected strokes (not mode-adjusted) as the value
+        // but use mode value for policy selection
+        let actualEV = 0;
+        for (const [zId, prob] of bestEntry.result.transitions) {
+          actualEV += prob * (V.get(zId) ?? 10);
+        }
+        const newV = 1 + bestEntry.result.expectedPenalty + actualEV;
+
+        maxDelta = Math.max(maxDelta, Math.abs(newV - oldV));
+        V.set(zone.id, newV);
+
+        policy.set(zone.id, {
+          clubIdx: bestEntry.key.clubIdx,
+          bearingIdx: bestEntry.key.bearingIdx,
+          bearing: bestEntry.bearing,
+          value: bestValue,
+        });
+      }
+    }
+
+    if (maxDelta < CONVERGENCE_THRESHOLD) break;
+  }
+
+  return policy;
+}
+
+// ---------------------------------------------------------------------------
+// Policy Extraction → NamedStrategyPlan
+// ---------------------------------------------------------------------------
+
+function extractPlan(
+  zones: Zone[],
+  policy: Map<number, PolicyEntry>,
+  distributions: ClubDistribution[],
+  hole: CourseHole,
+  teeBox: string,
+  mode: ScoringMode,
+): NamedStrategyPlan {
+  const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
+  const shots: NamedStrategyPlan['shots'] = [];
+
+  let currentZone = zones[0]; // tee
+  const maxShots = hole.par + 1; // reasonable limit for plan extraction
+
+  for (let i = 0; i < maxShots; i++) {
+    if (currentZone.isTerminal) break;
+
+    const entry = policy.get(currentZone.id);
+    if (!entry) break;
+
+    const clubs = getEligibleClubs(currentZone, distributions);
+    if (entry.clubIdx >= clubs.length) break;
+
+    const club = clubs[entry.clubIdx];
+    const aimPoint = projectPoint(currentZone.position, entry.bearing, club.meanCarry);
+
+    shots.push({ clubDist: club, aimPoint });
+
+    // Simulate expected landing for next zone
+    const landing = projectPoint(currentZone.position, entry.bearing, club.meanCarry);
+    const landingDist = haversineYards(landing, pin);
+
+    if (landingDist <= GREEN_RADIUS) break;
+
+    // Find the zone closest to expected landing
+    const nextZoneId = findNearestZone(landing, zones);
+    const nextZone = zones.find((z) => z.id === nextZoneId);
+    if (!nextZone || nextZone.isTerminal) break;
+
+    currentZone = nextZone;
+  }
+
+  // If no shots extracted, fallback to a simple approach
+  if (shots.length === 0) {
+    const dist = hole.playsLikeYards?.[teeBox] ?? hole.yardages[teeBox] ?? Object.values(hole.yardages)[0] ?? 0;
+    const club = distributions.reduce((best, c) =>
+      Math.abs(c.meanCarry - dist) < Math.abs(best.meanCarry - dist) ? c : best,
+    );
+    shots.push({ clubDist: club, aimPoint: pin });
+  }
+
+  const { name, type } = MODE_LABELS[mode];
+  return { name, type, shots };
+}
+
+// ---------------------------------------------------------------------------
+// Policy-Following Monte Carlo Simulation
+// ---------------------------------------------------------------------------
+
+function simulateWithPolicy(
+  plan: NamedStrategyPlan,
+  hole: CourseHole,
+  distributions: ClubDistribution[],
+  zones: Zone[],
+  policy: Map<number, PolicyEntry>,
+  trials: number = DEFAULT_TRIALS,
+): OptimizedStrategy {
+  const tee = { lat: hole.tee.lat, lng: hole.tee.lng };
+  const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
+  const minClubCarry = Math.min(...distributions.map((c) => c.meanCarry));
+  const chipThreshold = Math.max(HOLE_THRESHOLD, minClubCarry * 0.5);
+
+  const trialScores: number[] = [];
+
+  for (let t = 0; t < trials; t++) {
+    let currentPos = { lat: tee.lat, lng: tee.lng };
+    let strokes = 0;
+    let currentZoneId = zones[0].id;
+
+    for (let shotIdx = 0; shotIdx < MAX_SHOTS_PER_HOLE; shotIdx++) {
+      const distToPin = haversineYards(currentPos, pin);
+      if (distToPin <= chipThreshold) break;
+
+      // Look up policy for current zone
+      const entry = policy.get(currentZoneId);
+      if (!entry) break;
+
+      const currentZone = zones.find((z) => z.id === currentZoneId);
+      if (!currentZone) break;
+
+      const clubs = getEligibleClubs(currentZone, distributions);
+      if (entry.clubIdx >= clubs.length) break;
+
+      const club = clubs[entry.clubIdx];
+      const lieMultiplier = currentZone.lie === 'rough' ? ROUGH_LIE_MULTIPLIER : 1.0;
+
+      const carry = gaussianSample(club.meanCarry, club.stdCarry * lieMultiplier);
+      const offline = gaussianSample(club.meanOffline, club.stdOffline * lieMultiplier);
+
+      const aimPoint = projectPoint(currentZone.position, entry.bearing, club.meanCarry);
+      const rawBearing = bearingBetween(currentPos, aimPoint);
+      const compensatedAim = compensateForBias(aimPoint, rawBearing, club);
+      const shotBearing = bearingBetween(currentPos, compensatedAim);
+
+      let landing = projectPoint(currentPos, shotBearing, carry);
+      if (Math.abs(offline) > 0.5) {
+        landing = projectPoint(landing, shotBearing + 90, offline);
+      }
+
+      strokes++;
+
+      const treeHit = checkTreeTrajectory(currentPos, shotBearing, carry, hole.hazards, club);
+      if (treeHit.hitTrees) {
+        landing = projectPoint(currentPos, shotBearing, treeHit.hitDistance);
+        strokes += 0.5;
+      }
+
+      const hazResult = checkHazards(landing, hole.hazards);
+      if (hazResult.inHazard) {
+        strokes += hazResult.penalty;
+        landing = projectPoint(landing, bearingBetween(landing, currentPos), 5);
+      }
+
+      currentPos = landing;
+      currentZoneId = findNearestZone(landing, zones);
+    }
+
+    // Greedy approach if still far
+    let distToPin = haversineYards(currentPos, pin);
+    while (distToPin > chipThreshold && strokes < MAX_SHOTS_PER_HOLE) {
+      const club = greedyClub(distToPin, distributions);
+      const carry = gaussianSample(club.meanCarry, club.stdCarry);
+      const offline = gaussianSample(club.meanOffline, club.stdOffline);
+      const greedyBearing = bearingBetween(currentPos, pin);
+      const compensatedGreedyAim = compensateForBias(pin, greedyBearing, club);
+      const shotBearing = bearingBetween(currentPos, compensatedGreedyAim);
+
+      let landing = projectPoint(currentPos, shotBearing, carry);
+      if (Math.abs(offline) > 0.5) {
+        landing = projectPoint(landing, shotBearing + 90, offline);
+      }
+
+      strokes++;
+
+      const greedyTreeHit = checkTreeTrajectory(currentPos, shotBearing, carry, hole.hazards, club);
+      if (greedyTreeHit.hitTrees) {
+        landing = projectPoint(currentPos, shotBearing, greedyTreeHit.hitDistance);
+        strokes += 0.5;
+      }
+
+      const hazResult = checkHazards(landing, hole.hazards);
+      if (hazResult.inHazard) {
+        strokes += hazResult.penalty;
+        landing = projectPoint(landing, bearingBetween(landing, currentPos), 5);
+      }
+
+      currentPos = landing;
+      distToPin = haversineYards(currentPos, pin);
+    }
+
+    // Putting
+    if (distToPin > HOLE_THRESHOLD && distToPin <= chipThreshold) {
+      trialScores.push(strokes + 1 + expectedPutts(3));
+    } else {
+      trialScores.push(strokes + expectedPutts(distToPin));
+    }
+  }
+
+  // Compute statistics
+  const xS = trialScores.reduce((a, b) => a + b, 0) / trialScores.length;
+  const variance = trialScores.reduce((sum, s) => sum + (s - xS) ** 2, 0) / trialScores.length;
+  const stdStrokes = Math.sqrt(variance);
+  const scoreDist = computeScoreDistribution(trialScores, hole.par);
+  const blowupRisk = scoreDist.double + scoreDist.worse;
+
+  // Build aim points from plan
+  const aimPoints: AimPoint[] = [];
+  let aimFrom = { lat: tee.lat, lng: tee.lng };
+  for (let i = 0; i < plan.shots.length; i++) {
+    const s = plan.shots[i];
+    const bearing = bearingBetween(aimFrom, s.aimPoint);
+    const compensatedPos = compensateForBias(s.aimPoint, bearing, s.clubDist);
+    const isApproach = i === plan.shots.length - 1;
+    aimPoints.push({
+      position: compensatedPos,
+      clubName: s.clubDist.clubName,
+      shotNumber: i + 1,
+      carry: Math.round(s.clubDist.meanCarry),
+      carryNote: computeCarryNote(aimFrom, s.clubDist.meanCarry, bearing, hole.hazards),
+      tip: generateCaddyTip(aimFrom, compensatedPos, s.aimPoint, s.clubDist, hole.hazards, isApproach),
+    });
+    aimFrom = s.aimPoint;
+  }
+
+  const label = plan.shots
+    .map((s) => `${s.clubDist.clubName} (${Math.round(s.clubDist.meanCarry)})`)
+    .join(' \u2192 ');
+
+  return {
+    clubs: plan.shots.map((s) => ({ clubId: s.clubDist.clubId, clubName: s.clubDist.clubName })),
+    expectedStrokes: xS,
+    stdStrokes,
+    label,
+    strategyName: plan.name,
+    strategyType: plan.type,
+    scoreDistribution: scoreDist,
+    blowupRisk,
+    aimPoints,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Top-Level Orchestrator
+// ---------------------------------------------------------------------------
+
+/**
+ * Run DP optimization for a single hole. Returns one OptimizedStrategy per mode
+ * (scoring, safe, aggressive), sorted by expected strokes ascending.
+ *
+ * The transition table is built once and shared across all 3 modes.
+ */
+export function dpOptimizeHole(
+  hole: CourseHole,
+  teeBox: string,
+  distributions: ClubDistribution[],
+): OptimizedStrategy[] {
+  if (distributions.length === 0) return [];
+
+  // 1. Discretize hole into zones
+  const zones = discretizeHole(hole, teeBox);
+  if (zones.length < 2) return [];
+
+  // 2. Build transition table (shared across modes)
+  const table = buildTransitionTable(zones, distributions, hole);
+  if (table.length === 0) return [];
+
+  const modes: ScoringMode[] = ['scoring', 'safe', 'aggressive'];
+  const results: OptimizedStrategy[] = [];
+
+  for (const mode of modes) {
+    // 3. Value iteration for this mode
+    const policy = valueIteration(zones, table, mode, hole.par);
+    if (policy.size === 0) continue;
+
+    // 4. Extract optimal plan from policy
+    const plan = extractPlan(zones, policy, distributions, hole, teeBox, mode);
+
+    // 5. Run full MC simulation following the policy for accurate score distributions
+    const strategy = simulateWithPolicy(plan, hole, distributions, zones, policy);
+
+    // Override strategy name/type from the plan (MC sim doesn't set these)
+    strategy.strategyName = plan.name;
+    strategy.strategyType = plan.type;
+
+    results.push(strategy);
+  }
+
+  // Sort by expected strokes ascending
+  results.sort((a, b) => a.expectedStrokes - b.expectedStrokes);
+
+  return results;
+}

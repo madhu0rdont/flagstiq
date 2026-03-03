@@ -51,25 +51,25 @@ export interface NamedStrategyPlan {
 // Constants
 // ---------------------------------------------------------------------------
 
-const HOLE_THRESHOLD = 10;
-const MAX_SHOTS_PER_HOLE = 8;
-const DEFAULT_TRIALS = 2000;
-const MIN_HAZARD_POINTS = 3;
-const TREE_HEIGHT_YARDS = 15; // ~45 feet — typical mature golf course tree
-const BALL_APEX_YARDS = 28;   // ~84 feet — reasonable average across all clubs
+export const HOLE_THRESHOLD = 10;
+export const MAX_SHOTS_PER_HOLE = 8;
+export const DEFAULT_TRIALS = 2000;
+export const MIN_HAZARD_POINTS = 3;
+export const TREE_HEIGHT_YARDS = 15; // ~45 feet — typical mature golf course tree
+export const BALL_APEX_YARDS = 28;   // ~84 feet — reasonable average across all clubs
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function gaussianSample(mu: number, sigma: number): number {
+export function gaussianSample(mu: number, sigma: number): number {
   const u1 = Math.random();
   const u2 = Math.random();
   const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
   return mu + sigma * z;
 }
 
-function greedyClub(target: number, clubs: ClubDistribution[]): ClubDistribution {
+export function greedyClub(target: number, clubs: ClubDistribution[]): ClubDistribution {
   let best = clubs[0];
   let bestDiff = Math.abs(clubs[0].meanCarry - target);
   for (let i = 1; i < clubs.length; i++) {
@@ -139,7 +139,7 @@ export function ballHeightAtDistance(
 
 /** Check if a ball's trajectory passes through any tree polygon below canopy height.
  *  Samples the flight path at 10y intervals near each tree polygon. */
-function checkTreeTrajectory(
+export function checkTreeTrajectory(
   from: { lat: number; lng: number },
   bearing: number,
   carry: number,
@@ -207,13 +207,13 @@ export function computeScoreDistribution(scores: number[], par: number): ScoreDi
 // Named Strategy Generation
 // ---------------------------------------------------------------------------
 
-function polygonCentroid(poly: { lat: number; lng: number }[]): { lat: number; lng: number } {
+export function polygonCentroid(poly: { lat: number; lng: number }[]): { lat: number; lng: number } {
   let lat = 0, lng = 0;
   for (const p of poly) { lat += p.lat; lng += p.lng; }
   return { lat: lat / poly.length, lng: lng / poly.length };
 }
 
-function closestClub(target: number, dists: ClubDistribution[]): ClubDistribution | undefined {
+export function closestClub(target: number, dists: ClubDistribution[]): ClubDistribution | undefined {
   if (dists.length === 0) return undefined;
   let best = dists[0];
   let bestDiff = Math.abs(dists[0].meanCarry - target);
@@ -235,7 +235,7 @@ function shortestClub(dists: ClubDistribution[]): ClubDistribution {
   return dists.reduce((a, b) => (b.meanCarry < a.meanCarry ? b : a), dists[0]);
 }
 
-function compensateForBias(
+export function compensateForBias(
   target: { lat: number; lng: number },
   shotBearing: number,
   club: ClubDistribution,
@@ -244,7 +244,7 @@ function compensateForBias(
   return projectPoint(target, shotBearing + 90, -club.meanOffline);
 }
 
-function centerLinePoint(
+export function centerLinePoint(
   centerLine: { lat: number; lng: number }[],
   from: { lat: number; lng: number },
   targetDist: number,
@@ -273,7 +273,7 @@ function centerLinePoint(
   return projectPoint(prev, fallbackBearing, targetDist - cumDist);
 }
 
-function findSafeLanding(
+export function findSafeLanding(
   target: { lat: number; lng: number },
   heading: number,
   hazards: HazardFeature[],
@@ -309,7 +309,7 @@ const HAZARD_SHORT: Record<string, string> = {
   rough: 'rough',
 };
 
-function computeCarryNote(
+export function computeCarryNote(
   from: { lat: number; lng: number },
   carry: number,
   bearing: number,
@@ -356,14 +356,14 @@ function computeCarryNote(
   return bestNote;
 }
 
-function normalizeAngle(a: number): number {
+export function normalizeAngle(a: number): number {
   let d = a % 360;
   if (d > 180) d -= 360;
   if (d < -180) d += 360;
   return d;
 }
 
-function describeHazard(
+export function describeHazard(
   h: HazardFeature,
   centroid: { lat: number; lng: number },
   from: { lat: number; lng: number },
@@ -379,7 +379,7 @@ function describeHazard(
   return `${side} ${typeName} at ${dist}y`;
 }
 
-function generateCaddyTip(
+export function generateCaddyTip(
   from: { lat: number; lng: number },
   aimPos: { lat: number; lng: number },
   target: { lat: number; lng: number },
@@ -465,7 +465,7 @@ function generateCaddyTip(
   return 'Down the center';
 }
 
-function expectedLanding(
+export function expectedLanding(
   from: { lat: number; lng: number },
   shotBearing: number,
   club: ClubDistribution,

@@ -6,8 +6,8 @@ import {
   simulateHoleGPS,
   optimizeHole,
   ballHeightAtDistance,
-} from '../strategy-optimizer';
-import type { ClubDistribution } from '../monte-carlo';
+} from '../../../server/services/strategy-optimizer';
+import type { ClubDistribution } from '../../../server/services/monte-carlo';
 import type { CourseHole, HazardFeature } from '../../models/course';
 import { pointInPolygon, distanceToPolygonEdge } from '../../utils/geo';
 

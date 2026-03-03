@@ -94,7 +94,7 @@ export function StrategyPlannerPage() {
   const { strategies, landingZones, aimPoints, shotCount } =
     useHoleStrategy(hole, teeBox, showSim, selectedStrategyIdx);
 
-  // Build distributions for GamePlanView (always, not gated by showSim)
+  // Build distributions for GamePlanView landing zone rendering
   const shotGroups = useYardageBookShots();
   const distributions = useMemo(() => {
     if (!shotGroups) return [];
@@ -105,7 +105,6 @@ export function StrategyPlannerPage() {
   const { gamePlan, isStale, staleReason, isFetching, isGenerating, progress, generate, cacheAge } = useGamePlanCache(
     course,
     teeBox,
-    distributions,
   );
 
   const keyHoleSet = useMemo(

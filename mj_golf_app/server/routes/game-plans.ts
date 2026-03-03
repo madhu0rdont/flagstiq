@@ -1,7 +1,13 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import { query, toCamel } from '../db.js';
 import { logger } from '../logger.js';
 import { regenerateStalePlans } from '../services/plan-regenerator.js';
+import { generateGamePlan } from '../services/game-plan.js';
+import { computeClubShotGroups } from '../services/club-shot-groups.js';
+import { buildDistributions } from '../services/monte-carlo.js';
+import type { ScoringMode } from '../services/dp-optimizer.js';
+import type { Club, Shot, CourseWithHoles, CourseHole } from '../models/types.js';
 
 const router = Router();
 
@@ -84,6 +90,84 @@ router.get('/history/:courseId/:teeBox/:mode/:id', async (req, res) => {
     res.json(toCamel(rows[0]));
   } catch (err) {
     logger.error('Failed to fetch game plan history entry', { error: String(err) });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Server-side plan generation
+// ---------------------------------------------------------------------------
+
+// POST /api/game-plans/:courseId/:teeBox/:mode/generate — generate plan on server
+router.post('/:courseId/:teeBox/:mode/generate', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const { courseId, teeBox, mode } = req.params;
+
+    if (!['scoring', 'safe', 'aggressive'].includes(mode)) {
+      return res.status(400).json({ error: 'Mode must be scoring, safe, or aggressive' });
+    }
+
+    // Load course + holes
+    const { rows: courseRows } = await query('SELECT * FROM courses WHERE id = $1', [courseId]);
+    if (courseRows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+    const course = toCamel<CourseWithHoles>(courseRows[0]);
+
+    const { rows: holeRows } = await query(
+      'SELECT * FROM course_holes WHERE course_id = $1 ORDER BY hole_number',
+      [courseId],
+    );
+    course.holes = holeRows.map(toCamel<CourseHole>);
+
+    if (course.holes.length === 0) {
+      return res.status(400).json({ error: 'Course has no holes' });
+    }
+
+    // Build distributions from user's shot data
+    const { rows: clubRows } = await query('SELECT * FROM clubs WHERE user_id = $1 ORDER BY sort_order', [userId]);
+    const clubs = clubRows.map(toCamel<Club>);
+
+    const { rows: shotRows } = await query('SELECT * FROM shots WHERE user_id = $1', [userId]);
+    const shots = shotRows.map(toCamel<Shot>);
+
+    const groups = computeClubShotGroups(clubs, shots);
+    const distributions = buildDistributions(groups);
+
+    if (distributions.length === 0) {
+      return res.status(400).json({ error: 'No shot data to build distributions' });
+    }
+
+    // Generate plan
+    const plan = generateGamePlan(course, teeBox, distributions, mode as ScoringMode);
+
+    // Upsert cache
+    const now = Date.now();
+    const cacheId = `${userId}_${courseId}_${teeBox}_${mode}`;
+    await query(
+      `INSERT INTO game_plan_cache (id, course_id, tee_box, mode, plan, stale, stale_reason, user_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, FALSE, NULL, $6, $7, $7)
+       ON CONFLICT (user_id, course_id, tee_box, mode)
+       DO UPDATE SET plan = $5, stale = FALSE, stale_reason = NULL, updated_at = $7`,
+      [cacheId, courseId, teeBox, mode, JSON.stringify(plan), userId, now],
+    );
+
+    // Insert history
+    const historyId = crypto.randomUUID();
+    await query(
+      `INSERT INTO game_plan_history (id, course_id, tee_box, mode, total_expected, plan, trigger_reason, user_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [historyId, courseId, teeBox, mode, plan.totalExpected, JSON.stringify(plan), 'manual_generate', userId, now],
+    );
+
+    logger.info(`Generated ${mode} plan for ${course.name} (${teeBox}): ${plan.totalExpected.toFixed(1)} xS`, {
+      component: 'game-plan-generate',
+    });
+
+    res.json({ ok: true, plan });
+  } catch (err) {
+    logger.error('Failed to generate game plan', { error: String(err) });
     res.status(500).json({ error: 'Internal server error' });
   }
 });

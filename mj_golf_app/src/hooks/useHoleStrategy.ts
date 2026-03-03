@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
+import useSWR from 'swr';
 import { useYardageBookShots } from './useYardageBook';
-import { buildDistributions } from '../services/monte-carlo';
-import { optimizeHole } from '../services/strategy-optimizer';
+import { api } from '../lib/api';
 import { projectPoint, computeEllipsePoints, bearingBetween } from '../utils/geo';
 import type { ClubDistribution, ApproachStrategy } from '../services/monte-carlo';
 import type { OptimizedStrategy, AimPoint } from '../services/strategy-optimizer';
@@ -96,6 +96,11 @@ export function computeLandingZonesFromAimPoints(
   return zones;
 }
 
+interface StrategyResponse {
+  strategies: OptimizedStrategy[];
+  distributions: ClubDistribution[];
+}
+
 export function useHoleStrategy(
   hole: CourseHole | undefined,
   teeBox: string,
@@ -109,9 +114,8 @@ export function useHoleStrategy(
   shotCount: number;
   isLoading: boolean;
 } {
+  // Still use local shot count for gating the "Run Sim" button
   const shotGroups = useYardageBookShots();
-  const isLoading = shotGroups === undefined;
-
   const totalShotCount = useMemo(() => {
     if (!shotGroups) return 0;
     return shotGroups
@@ -119,21 +123,21 @@ export function useHoleStrategy(
       .reduce((sum, g) => sum + g.shots.length, 0);
   }, [shotGroups]);
 
-  const distributions = useMemo(() => {
-    if (!enabled || !shotGroups) return [];
-    return buildDistributions(shotGroups);
-  }, [enabled, shotGroups]);
+  // Fetch strategies from server via POST (SWR with a stable key)
+  const swrKey = enabled && hole ? `strategy:${hole.courseId}:${hole.holeNumber}:${teeBox}` : null;
+  const { data, isLoading: isStrategyLoading } = useSWR<StrategyResponse>(
+    swrKey,
+    () => api.post<StrategyResponse>('/strategy/hole', {
+      courseId: hole!.courseId,
+      holeNumber: hole!.holeNumber,
+      teeBox,
+    }),
+    { revalidateOnFocus: false },
+  );
 
-  const distance = useMemo(() => {
-    if (!hole) return 0;
-    // Prefer plays-like yardage (elevation-adjusted), fall back to raw
-    return hole.playsLikeYards?.[teeBox] ?? hole.yardages[teeBox] ?? Object.values(hole.yardages)[0] ?? 0;
-  }, [hole, teeBox]);
-
-  const strategies = useMemo(() => {
-    if (!enabled || distributions.length === 0 || distance === 0 || !hole) return [];
-    return optimizeHole(hole, teeBox, distributions);
-  }, [enabled, distributions, distance, hole, teeBox]);
+  const strategies = data?.strategies ?? [];
+  const distributions = data?.distributions ?? [];
+  const isLoading = shotGroups === undefined || (enabled && isStrategyLoading);
 
   const landingZones = useMemo(() => {
     if (!enabled || !hole || strategies.length === 0) return [];
