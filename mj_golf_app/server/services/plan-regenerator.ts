@@ -1,9 +1,8 @@
+import crypto from 'node:crypto';
 import { query, toCamel } from '../db.js';
 import { logger } from '../logger.js';
-import { computeClubShotGroups } from './club-shot-groups.js';
-import { buildDistributions } from './monte-carlo.js';
-import { generateGamePlan } from './game-plan.js';
 import { getRoughPenalty } from './strategy-optimizer.js';
+import { generatePlanInWorker } from './plan-worker-pool.js';
 import type { ScoringMode } from './dp-optimizer.js';
 import type { Club, Shot, CourseWithHoles, CourseHole } from '../models/types.js';
 
@@ -42,18 +41,9 @@ export async function regenerateStalePlans() {
       const { rows: shotRows } = await query('SELECT * FROM shots WHERE user_id = $1', [userId]);
       const shots = shotRows.map(toCamel<Shot>);
 
-      const groups = computeClubShotGroups(clubs, shots);
-      const distributions = buildDistributions(groups);
-
-      if (distributions.length === 0) {
-        logger.info(`No distributions for user ${userId}, skipping`, { component: 'plan-regen' });
-        continue;
-      }
+      const roughPenalty = await getRoughPenalty();
 
       for (const row of userPlans) {
-        // Yield event loop between plans so HTTP requests can be served
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
         const courseId = row.course_id as string;
         const teeBox = row.tee_box as string;
         const mode = row.mode as string;
@@ -74,9 +64,15 @@ export async function regenerateStalePlans() {
 
           if (course.holes.length === 0) continue;
 
-          // Generate plan with the mode from the cache entry
-          const roughPenalty = await getRoughPenalty();
-          const plan = generateGamePlan(course, teeBox, distributions, mode as ScoringMode, roughPenalty);
+          // Generate plan in a worker thread (non-blocking)
+          const plan = await generatePlanInWorker({
+            clubs,
+            shots,
+            course,
+            teeBox,
+            mode: mode as ScoringMode,
+            roughPenalty,
+          });
 
           // Upsert game_plan_cache (stale = FALSE)
           const now = Date.now();

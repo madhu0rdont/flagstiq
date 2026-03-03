@@ -3,10 +3,8 @@ import crypto from 'node:crypto';
 import { query, toCamel } from '../db.js';
 import { logger } from '../logger.js';
 import { regenerateStalePlans } from '../services/plan-regenerator.js';
-import { generateGamePlan } from '../services/game-plan.js';
 import { getRoughPenalty } from '../services/strategy-optimizer.js';
-import { computeClubShotGroups } from '../services/club-shot-groups.js';
-import { buildDistributions } from '../services/monte-carlo.js';
+import { generatePlanInWorker } from '../services/plan-worker-pool.js';
 import type { ScoringMode } from '../services/dp-optimizer.js';
 import type { Club, Shot, CourseWithHoles, CourseHole } from '../models/types.js';
 
@@ -180,23 +178,23 @@ router.post('/:courseId/:teeBox/:mode/generate', async (req, res) => {
       return res.status(400).json({ error: 'Course has no holes' });
     }
 
-    // Build distributions from user's shot data
+    // Load user's club/shot data
     const { rows: clubRows } = await query('SELECT * FROM clubs WHERE user_id = $1 ORDER BY sort_order', [userId]);
     const clubs = clubRows.map(toCamel<Club>);
 
     const { rows: shotRows } = await query('SELECT * FROM shots WHERE user_id = $1', [userId]);
     const shots = shotRows.map(toCamel<Shot>);
 
-    const groups = computeClubShotGroups(clubs, shots);
-    const distributions = buildDistributions(groups);
-
-    if (distributions.length === 0) {
-      return res.status(400).json({ error: 'No shot data to build distributions' });
-    }
-
-    // Generate plan
+    // Generate plan in worker thread (non-blocking)
     const roughPenalty = await getRoughPenalty();
-    const plan = generateGamePlan(course, teeBox, distributions, mode as ScoringMode, roughPenalty);
+    const plan = await generatePlanInWorker({
+      clubs,
+      shots,
+      course,
+      teeBox,
+      mode: mode as ScoringMode,
+      roughPenalty,
+    });
 
     // Upsert cache
     const now = Date.now();
