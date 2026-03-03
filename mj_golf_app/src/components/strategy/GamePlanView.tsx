@@ -130,8 +130,24 @@ function HoleCard({ hole, isKeyHole }: { hole: HolePlan; isKeyHole?: boolean }) 
                 <span className="text-text-muted/60"> (plays {hole.playsLikeYardage})</span>
               )}
             </span>
-            <span className="ml-auto text-sm font-semibold text-primary">
-              {hole.strategy.expectedStrokes.toFixed(1)} xS
+            <span className="ml-auto flex items-center gap-1">
+              <span className="text-sm font-semibold text-primary">
+                {hole.strategy.expectedStrokes.toFixed(1)}
+              </span>
+              <span className="text-[10px] text-text-muted">
+                ±{hole.strategy.stdStrokes.toFixed(1)}
+              </span>
+              {hole.strategy.blowupRisk > 0.05 && (
+                <span
+                  className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                    hole.strategy.blowupRisk > 0.15
+                      ? 'bg-coral/20 text-coral'
+                      : 'bg-gold/20 text-gold-dark'
+                  }`}
+                >
+                  {(hole.strategy.blowupRisk * 100).toFixed(0)}% blow
+                </span>
+              )}
             </span>
           </div>
 
@@ -153,6 +169,21 @@ function HoleCard({ hole, isKeyHole }: { hole: HolePlan; isKeyHole?: boolean }) 
               ))}
             </div>
           )}
+
+          {/* Score distribution bar */}
+          <div className="flex h-2 w-full rounded-full overflow-hidden mt-1.5">
+            {SCORE_PILLS.map(({ key, color }) => {
+              const pct = hole.strategy.scoreDistribution[key] * 100;
+              if (pct < 0.5) return null;
+              return (
+                <div
+                  key={key}
+                  style={{ width: `${pct}%`, backgroundColor: color }}
+                  title={`${key}: ${pct.toFixed(0)}%`}
+                />
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
