@@ -518,12 +518,23 @@ Once you're within wedge range, a simple greedy recommendation takes over — it
   Rough — 0.2 stroke`}</P>
           <P>{`Penalties are configurable from the Admin page. The green is also drawn as a polygon and used to compute the center-green aim point for par 3 strategies.`}</P>
 
+          <H4>Hazard drop logic</H4>
+          <P>{`When a simulated shot lands in a hazard, the drop location depends on the hazard type — following real Rules of Golf behavior:
+
+  OB — ball is dropped where it crosses the OB boundary, not deep inside. A binary search (8 iterations) along the shot trajectory finds the entry point, then drops 2 yards back toward the shot origin. The drop is validated to ensure it doesn't land in another hazard.
+
+  Bunkers — ball stays in the bunker. The penalty represents shot difficulty (partial lies, awkward stances), not a re-drop. You play your next shot from where it landed.
+
+  Water — ball is moved 5 yards backward along the shot line. The drop point is validated via safe-drop search to avoid landing in adjacent hazards.
+
+Shots landing outside all fairway, green, and hazard polygons are treated as rough and incur an implicit rough penalty (default 0.3 strokes, configurable via Admin > Hazard Penalties). This ensures the optimizer strongly favors landing on defined fairway polygons.`}</P>
+
           <H4>Strategy optimizer — Dynamic Programming (MDP)</H4>
           <P>{String.raw`Rather than using hardcoded strategy templates, the optimizer models each hole as a Markov Decision Process (MDP) and solves it with Dynamic Programming. This means it explores every reachable position on the hole, every eligible club you could hit from that position, and every aim direction you might choose — then finds the sequence of decisions that minimizes your expected score.
 
 The key advantage: the optimizer discovers strategies on its own. It doesn't need to be told "hit driver, then 7-iron." It figures out that a 3-wood off the tee followed by a gap wedge scores better than driver-plus-9-iron because the 3-wood avoids the fairway bunker at 260 yards. It also produces conditional strategies — if your tee shot ends up in the rough right instead of the fairway, it already knows the best play from there.
 
-All computation runs server-side (~4–5 seconds per hole, ~80 seconds for 18 holes). The client fetches results via API.`}</P>
+All computation runs server-side (~5–8 seconds per hole, ~120 seconds for 18 holes). The client fetches results via API.`}</P>
 
           <H4>Step 1: Zone discretization</H4>
           <P>{String.raw`The optimizer breaks each hole into a grid of discrete zones. Starting from the tee, it walks along the hole's center line in 20-yard intervals. At each interval, it creates 3 lateral positions: center (on the center line), left (20 yards left), and right (20 yards right). Each zone records its GPS position, its distance to the pin, and its lie — fairway or rough — determined by checking whether the position falls inside any fairway polygon.
@@ -532,18 +543,20 @@ The tee is zone 0. The green is a terminal zone: once the ball reaches within 10
 
 $$\text{zones} = \{\text{tee}\} \cup \bigcup_{d=20,40,\ldots}^{d_\text{pin}-10} \{\text{center}_d, \text{left}_d, \text{right}_d\} \cup \{\text{green}\}$$
 
-The green zone's value is set to expected putts from 0 yards — the terminal condition for value iteration.`}</P>
+The green zone's value is set to expected putts from 0 yards — the terminal condition for value iteration.
+
+For doglegs without explicit center line data, the optimizer synthesizes one by walking from tee to pin in 20-yard steps, scoring candidate directions across a $\pm$75° fan at each step. Candidates on the fairway score +10, in a hazard score −20, and closer to the pin get a small distance bonus. The resulting center line follows the fairway's natural curve.`}</P>
 
           <H4>Step 2: Action space</H4>
           <P>{String.raw`From each non-terminal zone, the optimizer enumerates every possible action: a (club, aim bearing) pair.
 
 Eligible clubs are those whose mean carry falls between 50% and 120% of the remaining distance to the pin. This keeps the search space practical — you wouldn't hit driver from 80 yards, and you wouldn't hit a wedge from 280. Typically 5–7 clubs qualify per zone.
 
-Aim bearings are sampled at 5° increments across $\pm$30° from the direct bearing to the pin — 13 bearings total. This lets the optimizer discover strategies like "aim 20° left to avoid water and let your draw bring it back."
+Aim bearings are sampled at 2° increments across $\pm$30° from the center line bearing at each zone — 31 bearings total. Using the center line direction instead of the pin bearing naturally aims tee shots down the fairway on doglegs. The fine 2° resolution lets the optimizer find narrow fairway windows (e.g., a 9°-wide fairway at 230 yards) that coarser steps would miss entirely.
 
-$$\text{actions}(z) = \{(c, \theta) : c \in \text{eligible}(z),\; \theta \in \{\theta_\text{pin} - 30°, \ldots, \theta_\text{pin} + 30°\}\}$$
+$$\text{actions}(z) = \{(c, \theta) : c \in \text{eligible}(z),\; \theta \in \{\theta_\text{centerline} - 30°, \ldots, \theta_\text{centerline} + 30°\}\}$$
 
-Total: ~70–90 actions per zone, explored exhaustively.`}</P>
+Total: ~150–220 actions per zone, explored exhaustively.`}</P>
 
           <H4>Step 3: Transition sampling</H4>
           <P>{String.raw`For each (zone, club, bearing) triple, the optimizer simulates 200 Gaussian shots to build a probability distribution over where the ball will end up.
@@ -559,21 +572,27 @@ Each sample is projected to a GPS landing point, checked for tree trajectory col
 
 $$P(z' \mid z, a) = \frac{\text{count of samples landing in zone } z'}{200}$$
 
-Along with the expected penalty $\mathbb{E}[\text{penalty} \mid z, a]$, penalty variance $\text{Var}[\text{penalty} \mid z, a]$, and the probability of reaching the green in one shot $P(\text{green} \mid z, a)$.
+Along with the expected penalty $\mathbb{E}[\text{penalty} \mid z, a]$, penalty variance $\text{Var}[\text{penalty} \mid z, a]$, the probability of reaching the green $P(\text{green} \mid z, a)$, and the probability of landing on the fairway $P(\text{fairway} \mid z, a)$ — used by the lie cascade correction in value iteration.
 
-This transition table is the most expensive step (~800K samples per hole) but is built once and shared across all 3 scoring modes.`}</P>
+This transition table is the most expensive step (~1.8M samples per hole with 31 bearings) but is built once and shared across all 3 scoring modes.`}</P>
 
           <H4>Step 4: Value iteration (Bellman equation)</H4>
           <P>{String.raw`With the transition table built, the optimizer solves for the optimal value (expected strokes to finish) at every zone using the Bellman equation. It does this 3 times with different objective functions, producing 3 strategies per hole:
 
+Each mode includes a lie cascade correction $\mathcal{L}$ that accounts for the cascading cost of rough landings. When a ball lands in rough but gets assigned to a fairway zone, that zone's $V$ value is optimistic — it assumes a fairway lie for subsequent shots. The correction compensates:
+
+$$\mathcal{L}(z, a) = \rho \cdot \bigl(1 - P(\text{fairway} \mid z,a) - P(\text{green} \mid z,a)\bigr)$$
+
+where $\rho$ is the rough penalty (default 0.3). This adds ~0.3 strokes for actions where most samples land in rough, on top of the direct penalty already captured in $\mathbb{E}[\text{penalty}]$.
+
 Scoring mode — pure expected strokes minimization:
-$$V(z) = \min_a \left[ 1 + \mathbb{E}[\text{penalty} \mid z,a] + \sum_{z'} P(z' \mid z,a) \cdot V(z') \right]$$
+$$V(z) = \min_a \left[ 1 + \mathbb{E}[\text{penalty}] + \mathcal{L} + \sum_{z'} P(z') \cdot V(z') \right]$$
 
 Safe mode — risk-adjusted, penalizes variance:
-$$V(z) = \min_a \left[ 1 + \mathbb{E}[\text{penalty} \mid z,a] + \sum_{z'} P(z' \mid z,a) \cdot V(z') + 0.5 \cdot \sigma_\text{penalty} \right]$$
+$$V(z) = \min_a \left[ 1 + \mathbb{E}[\text{penalty}] + \mathcal{L} + \sum_{z'} P(z') \cdot V(z') + 0.5 \cdot \sigma_\text{penalty} \right]$$
 
 Aggressive mode — rewards reaching the green (birdie hunting):
-$$V(z) = \min_a \left[ 1 + \mathbb{E}[\text{penalty} \mid z,a] + \sum_{z'} P(z' \mid z,a) \cdot V(z') - 0.3 \cdot P(\text{green} \mid z,a) \right]$$
+$$V(z) = \min_a \left[ 1 + \mathbb{E}[\text{penalty}] + \mathcal{L} + \sum_{z'} P(z') \cdot V(z') - 0.3 \cdot P(\text{green}) \right]$$
 
 The $+0.5\sigma$ term in Safe mode means it prefers lower-variance plays even if they cost a fraction of a stroke on average. The $-0.3 \cdot P(\text{green})$ term in Aggressive mode gives a bonus for actions that can reach the green — encouraging go-for-it plays on par 5s and drivable par 4s.
 
@@ -693,25 +712,28 @@ Safe — adds a $+0.5\sigma$ variance penalty. This mode prefers consistent play
 
 Aggressive — subtracts $-0.3 \cdot P(\text{green})$ for green-reaching actions. This mode actively hunts for birdies by rewarding shots that can reach the putting surface. On par 5s, it favors going for the green in two. On short par 4s, it may recommend driver over 3-wood even with more risk, because reaching the green in one opens up eagle chances.`}</P>
 
+          <H4>Strategy ranking</H4>
+          <P>{String.raw`Strategies are ranked by expected strokes, with fairway rate as a tiebreaker. When two strategies are within 0.3 strokes of each other, the one with a higher first-shot fairway rate is ranked first. This ensures the optimizer doesn't recommend a rough-landing strategy over a fairway-hitting one when the expected scores are practically equivalent.`}</P>
+
           <H4>Template fallback</H4>
           <P>{`If the DP optimizer returns no results for a hole (e.g., missing fairway or green polygon data), the system falls back to pre-defined strategy templates: Par 3 (Pin Hunting / Center Green / Bail Out), Par 4 (Conservative / Aggressive / Layup), Par 5 (Conservative 3-Shot / Go-For-It / Safe Layup). These use the same Monte Carlo simulation for scoring but with fixed club/aim selections instead of optimized ones.`}</P>
 
           <H4>Computation budget</H4>
           <P>{String.raw`The DP optimizer's computation breaks down as follows:
 
-Transition sampling: $50 \text{ zones} \times 80 \text{ actions} \times 200 \text{ samples} = 800\text{K samples}$ (built once, shared across all modes)
+Transition sampling: $50 \text{ zones} \times 190 \text{ actions} \times 200 \text{ samples} = 1.9\text{M samples}$ (built once, shared across all modes)
 
-Value iteration: $50 \text{ zones} \times 80 \text{ actions} \times 3 \text{ modes} \times \sim\!10 \text{ iterations} \approx 120\text{K evaluations}$
+Value iteration: $50 \text{ zones} \times 190 \text{ actions} \times 3 \text{ modes} \times \sim\!10 \text{ iterations} \approx 285\text{K evaluations}$
 
 Policy Monte Carlo: $3 \text{ modes} \times 2{,}000 \text{ trials} = 6\text{K trials}$
 
-Total: ~4–5 seconds per hole, ~80 seconds for 18 holes. All computation runs server-side so the client stays responsive.`}</P>
+Total: ~5–8 seconds per hole, ~120 seconds for 18 holes. All computation runs server-side so the client stays responsive.`}</P>
 
           <H4>Constants reference</H4>
           <P>{String.raw`  Zone interval — 20 yards (distance between zone markers)
   Lateral offset — 20 yards (left/right from center line)
-  Bearing step — 5° (aim bearing increment)
-  Bearing range — $\pm$30° from pin bearing (13 bearings total)
+  Bearing step — 2° (aim bearing increment)
+  Bearing range — $\pm$30° from center line bearing (31 bearings total)
   Samples per action — 200 (Gaussian shots for transition table)
   Rough lie multiplier — 1.15× std deviation
   Green threshold — 10 yards (ball is "on the green")
