@@ -61,7 +61,7 @@ router.get('/handicap', async (req, res) => {
       `SELECT gpc.plan, c.par, c.rating, c.slope
        FROM game_plan_cache gpc
        JOIN courses c ON c.id = gpc.course_id
-       WHERE gpc.user_id = $1 AND gpc.mode = 'scoring' AND gpc.stale = FALSE`,
+       WHERE gpc.user_id = $1 AND gpc.mode = 'scoring'`,
       [userId],
     );
 
