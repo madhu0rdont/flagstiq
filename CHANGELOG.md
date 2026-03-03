@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.5.2 — DP Optimizer: V Fallback, MC Resilience, Dogleg Aim Bearings
+- Fix inflated V values for no-action zones: approach-aware fallback using `greedyClub` instead of broken `expectedPutts(rawDist)` (~0.7–1.0 stroke deflation, making Driver/3Wood competitive on long holes)
+- MC simulation no longer breaks on missing policy entries: fires inline greedy shots and continues, so each scoring mode produces independent expected-stroke estimates
+- Aim bearing fan centered on `zone.localBearing` (centerLine direction) instead of pin bearing, naturally aiming tee shots down the fairway on doglegs
+
 ## v1.5.1 — DP Optimizer Dogleg Fix & Test Coverage
 - Synthetic center line for doglegs: when `centerLine` is empty, `synthesizeCenterLine()` walks the fairway in 20y steps using a scored bearing fan (±75°) to avoid hazards
 - Approach threshold: plans now add a final approach shot when landing within the shortest club's carry distance (58-degree wedge), ensuring plans always reach the green
