@@ -330,6 +330,7 @@ export async function migrate() {
   await query(`CREATE INDEX IF NOT EXISTS idx_clubs_user ON clubs(user_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_shots_user ON shots(user_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_shots_user_session ON shots(user_id, session_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_game_plan_cache_user ON game_plan_cache(user_id, course_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_game_plan_history_user ON game_plan_history(user_id, course_id)`);
 

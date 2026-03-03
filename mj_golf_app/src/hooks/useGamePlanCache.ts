@@ -24,6 +24,7 @@ export function useGamePlanCache(
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const staleRef = useRef(false);
+  const pollCountRef = useRef(0);
 
   const cacheKey = course ? `/api/game-plans/${course.id}/${teeBox}/scoring` : null;
 
@@ -38,11 +39,23 @@ export function useGamePlanCache(
         throw err;
       }
     },
-    { refreshInterval: () => staleRef.current ? 3000 : 0 },
+    {
+      // Exponential backoff when stale: 3s, 6s, 12s, 24s, capped at 30s
+      refreshInterval: () => {
+        if (!staleRef.current) {
+          pollCountRef.current = 0;
+          return 0;
+        }
+        const interval = Math.min(3000 * Math.pow(2, pollCountRef.current), 30000);
+        pollCountRef.current++;
+        return interval;
+      },
+    },
   );
 
   // Keep ref in sync for SWR's refreshInterval callback
   staleRef.current = data?.stale ?? false;
+  if (!data?.stale) pollCountRef.current = 0;
 
   const gamePlan = data?.plan ?? null;
   const isStale = data?.stale ?? false;

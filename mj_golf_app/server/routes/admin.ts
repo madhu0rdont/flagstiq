@@ -361,6 +361,13 @@ router.post('/courses/:id/scorecard', async (req, res) => {
       }
     }
 
+    // Load all holes once for elevation data (avoid N+1 queries)
+    const { rows: allHoleRows } = await client.query(
+      'SELECT hole_number, tee, pin FROM course_holes WHERE course_id = $1',
+      [courseId],
+    );
+    const holeElevMap = new Map(allHoleRows.map(r => [r.hole_number as number, r]));
+
     for (const h of holeData) {
       const sets: string[] = [];
       const vals: unknown[] = [];
@@ -378,13 +385,10 @@ router.post('/courses/:id/scorecard', async (req, res) => {
       }
 
       // Recompute plays_like_yards using elevation delta
-      const { rows: holeRows } = await client.query(
-        'SELECT tee, pin FROM course_holes WHERE course_id = $1 AND hole_number = $2',
-        [courseId, h.holeNumber],
-      );
-      if (holeRows.length > 0) {
-        const teeData = holeRows[0].tee;
-        const pinData = holeRows[0].pin;
+      const existingHole = holeElevMap.get(h.holeNumber);
+      if (existingHole) {
+        const teeData = existingHole.tee;
+        const pinData = existingHole.pin;
         const elevDelta = (pinData?.elevation ?? 0) - (teeData?.elevation ?? 0);
         const playsLike: Record<string, number> = {};
         for (const [color, yards] of Object.entries(h.yardages)) {
@@ -439,12 +443,14 @@ router.put('/hazard-penalties', async (req, res) => {
     await client.query('BEGIN');
     const now = Date.now();
 
-    // 1. Upsert each penalty
-    for (const { type, penalty } of penalties) {
+    // 1. Batch upsert all penalties in one query
+    if (penalties.length > 0) {
+      const placeholders = penalties.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`);
+      const values = penalties.flatMap(({ type, penalty }) => [type, penalty, now]);
       await client.query(
-        `INSERT INTO hazard_penalties (type, penalty, updated_at) VALUES ($1, $2, $3)
-         ON CONFLICT (type) DO UPDATE SET penalty = $2, updated_at = $3`,
-        [type, penalty, now],
+        `INSERT INTO hazard_penalties (type, penalty, updated_at) VALUES ${placeholders.join(', ')}
+         ON CONFLICT (type) DO UPDATE SET penalty = EXCLUDED.penalty, updated_at = EXCLUDED.updated_at`,
+        values,
       );
     }
 

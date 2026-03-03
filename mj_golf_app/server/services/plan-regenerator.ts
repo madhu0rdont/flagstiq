@@ -9,6 +9,9 @@ import type { Club, Shot, CourseWithHoles, CourseHole } from '../models/types.js
 // PostgreSQL advisory lock ID for plan regeneration
 const REGEN_LOCK_ID = 1337;
 
+// Max concurrent worker threads for plan generation
+const WORKER_CONCURRENCY = 2;
+
 export async function regenerateStalePlans() {
   // Acquire advisory lock (non-blocking). Returns false if another instance holds it.
   const { rows: lockRows } = await query('SELECT pg_try_advisory_lock($1) AS acquired', [REGEN_LOCK_ID]);
@@ -43,59 +46,75 @@ export async function regenerateStalePlans() {
 
       const roughPenalty = await getRoughPenalty();
 
-      for (const row of userPlans) {
-        const courseId = row.course_id as string;
-        const teeBox = row.tee_box as string;
-        const mode = row.mode as string;
-        const staleReason = row.stale_reason as string | null;
+      // Pre-load all courses + holes for this user's stale plans
+      const courseIds = [...new Set(userPlans.map(r => r.course_id as string))];
+      const courseMap = new Map<string, CourseWithHoles>();
+      for (const courseId of courseIds) {
+        const { rows: courseRows } = await query('SELECT * FROM courses WHERE id = $1', [courseId]);
+        if (courseRows.length === 0) continue;
+        const course = toCamel<CourseWithHoles>(courseRows[0]);
+        const { rows: holeRows } = await query(
+          'SELECT * FROM course_holes WHERE course_id = $1 ORDER BY hole_number',
+          [courseId],
+        );
+        course.holes = holeRows.map(toCamel<CourseHole>);
+        if (course.holes.length > 0) courseMap.set(courseId, course);
+      }
 
-        try {
-          // Fetch course + holes
-          const { rows: courseRows } = await query('SELECT * FROM courses WHERE id = $1', [courseId]);
-          if (courseRows.length === 0) continue;
+      // Regenerate plans in parallel batches
+      for (let i = 0; i < userPlans.length; i += WORKER_CONCURRENCY) {
+        const batch = userPlans.slice(i, i + WORKER_CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map(async (row) => {
+            const courseId = row.course_id as string;
+            const teeBox = row.tee_box as string;
+            const mode = row.mode as string;
+            const staleReason = row.stale_reason as string | null;
+            const course = courseMap.get(courseId);
+            if (!course) return;
 
-          const course = toCamel<CourseWithHoles>(courseRows[0]);
+            const plan = await generatePlanInWorker({
+              clubs,
+              shots,
+              course,
+              teeBox,
+              mode: mode as ScoringMode,
+              roughPenalty,
+            });
 
-          const { rows: holeRows } = await query(
-            'SELECT * FROM course_holes WHERE course_id = $1 ORDER BY hole_number',
-            [courseId],
-          );
-          course.holes = holeRows.map(toCamel<CourseHole>);
+            // Upsert game_plan_cache (stale = FALSE)
+            const now = Date.now();
+            const cacheId = `${userId}_${courseId}_${teeBox}_${mode}`;
+            await query(
+              `INSERT INTO game_plan_cache (id, course_id, tee_box, mode, plan, stale, stale_reason, user_id, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, FALSE, NULL, $6, $7, $7)
+               ON CONFLICT (user_id, course_id, tee_box, mode)
+               DO UPDATE SET plan = $5, stale = FALSE, stale_reason = NULL, updated_at = $7`,
+              [cacheId, courseId, teeBox, mode, JSON.stringify(plan), userId, now],
+            );
 
-          if (course.holes.length === 0) continue;
+            // Insert game_plan_history row
+            const historyId = crypto.randomUUID();
+            await query(
+              `INSERT INTO game_plan_history (id, course_id, tee_box, mode, total_expected, plan, trigger_reason, user_id, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+              [historyId, courseId, teeBox, mode, plan.totalExpected, JSON.stringify(plan), staleReason, userId, now],
+            );
 
-          // Generate plan in a worker thread (non-blocking)
-          const plan = await generatePlanInWorker({
-            clubs,
-            shots,
-            course,
-            teeBox,
-            mode: mode as ScoringMode,
-            roughPenalty,
-          });
+            logger.info(`${course.name} (${teeBox}/${mode}): ${plan.totalExpected.toFixed(1)} xS`, { component: 'plan-regen' });
+          }),
+        );
 
-          // Upsert game_plan_cache (stale = FALSE)
-          const now = Date.now();
-          const cacheId = `${userId}_${courseId}_${teeBox}_${mode}`;
-          await query(
-            `INSERT INTO game_plan_cache (id, course_id, tee_box, mode, plan, stale, stale_reason, user_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, FALSE, NULL, $6, $7, $7)
-             ON CONFLICT (user_id, course_id, tee_box, mode)
-             DO UPDATE SET plan = $5, stale = FALSE, stale_reason = NULL, updated_at = $7`,
-            [cacheId, courseId, teeBox, mode, JSON.stringify(plan), userId, now],
-          );
-
-          // Insert game_plan_history row
-          const historyId = crypto.randomUUID();
-          await query(
-            `INSERT INTO game_plan_history (id, course_id, tee_box, mode, total_expected, plan, trigger_reason, user_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [historyId, courseId, teeBox, mode, plan.totalExpected, JSON.stringify(plan), staleReason, userId, now],
-          );
-
-          logger.info(`${course.name} (${teeBox}/${mode}): ${plan.totalExpected.toFixed(1)} xS`, { component: 'plan-regen' });
-        } catch (err) {
-          logger.error(`Failed for ${courseId}/${teeBox}/${mode}`, { component: 'plan-regen', error: String(err) });
+        // Log any failures
+        for (let j = 0; j < results.length; j++) {
+          const result = results[j];
+          if (result.status === 'rejected') {
+            const row = batch[j];
+            logger.error(`Failed for ${row.course_id}/${row.tee_box}/${row.mode}`, {
+              component: 'plan-regen',
+              error: String(result.reason),
+            });
+          }
         }
       }
     }

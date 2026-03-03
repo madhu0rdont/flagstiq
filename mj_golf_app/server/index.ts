@@ -113,10 +113,22 @@ app.use('/api/admin', adminRouter);
 
 // Serve static SPA files
 const distPath = join(__dirname, '..', 'dist');
-app.use(express.static(distPath));
 
-// SPA fallback — serve index.html for all non-API routes
+// Hashed assets (Vite puts them in /assets/) — cache forever
+app.use('/assets', express.static(join(distPath, 'assets'), {
+  maxAge: '1y',
+  immutable: true,
+}));
+
+// Other static files (sw.js, manifest, etc.) — short cache with revalidation
+app.use(express.static(distPath, {
+  maxAge: '1h',
+  etag: true,
+}));
+
+// SPA fallback — serve index.html for all non-API routes (no cache)
 app.get('/{*splat}', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(join(distPath, 'index.html'));
 });
 
