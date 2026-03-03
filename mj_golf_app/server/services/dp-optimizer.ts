@@ -973,11 +973,11 @@ export function dpOptimizeHole(
   }
 
   // Sort by expected strokes ascending, with fairway rate as tiebreaker
-  // When strategies are within 0.2 strokes, prefer the one with higher fairway rate
+  // When strategies are within 0.3 strokes, prefer the one with higher fairway rate
   results.sort((a, b) => {
     const strokeDiff = a.expectedStrokes - b.expectedStrokes;
-    if (Math.abs(strokeDiff) > 0.2) return strokeDiff;
-    // Within 0.2 strokes — prefer higher fairway/green rate
+    if (Math.abs(strokeDiff) > 0.3) return strokeDiff;
+    // Within 0.3 strokes — prefer higher fairway/green rate
     const fairwayDiff = b.fairwayRate - a.fairwayRate;
     if (Math.abs(fairwayDiff) > 0.05) return fairwayDiff;
     return strokeDiff;
