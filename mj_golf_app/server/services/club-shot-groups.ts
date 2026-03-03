@@ -9,6 +9,7 @@ const CLUB_COLORS = [
 export interface ClubShotGroup {
   clubId: string;
   clubName: string;
+  category: string;
   color: string;
   shots: Shot[];
   imputed?: boolean;
@@ -52,6 +53,7 @@ export function computeClubShotGroups(clubs: Club[], allShots: Shot[]): ClubShot
       groups.push({
         clubId: club.id,
         clubName: club.name,
+        category: club.category,
         color: CLUB_COLORS[colorIdx % CLUB_COLORS.length],
         shots,
       });
@@ -63,6 +65,7 @@ export function computeClubShotGroups(clubs: Club[], allShots: Shot[]): ClubShot
         groups.push({
           clubId: club.id,
           clubName: club.name,
+          category: club.category,
           color: CLUB_COLORS[colorIdx % CLUB_COLORS.length],
           shots: [syntheticShot(club.id, metrics)],
           imputed: true,
@@ -74,6 +77,7 @@ export function computeClubShotGroups(clubs: Club[], allShots: Shot[]): ClubShot
           groups.push({
             clubId: club.id,
             clubName: club.name,
+            category: club.category,
             color: CLUB_COLORS[colorIdx % CLUB_COLORS.length],
             shots: [syntheticShot(club.id, metrics)],
             imputed: true,

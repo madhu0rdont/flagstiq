@@ -292,9 +292,12 @@ function getEligibleClubs(
 ): ClubDistribution[] {
   if (zone.isTerminal) return [];
   const dist = zone.distToPin;
-  return distributions.filter((c) =>
-    c.meanCarry >= dist * MIN_CARRY_RATIO && c.meanCarry <= dist * MAX_CARRY_RATIO,
-  );
+  const isTee = zone.id === 0;
+  return distributions.filter((c) => {
+    // Drivers can only be hit from the tee
+    if (c.category === 'driver' && !isTee) return false;
+    return c.meanCarry >= dist * MIN_CARRY_RATIO && c.meanCarry <= dist * MAX_CARRY_RATIO;
+  });
 }
 
 function getAimBearings(

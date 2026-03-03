@@ -4,6 +4,7 @@ import type { ClubShotGroup } from './club-shot-groups.js';
 export interface ClubDistribution {
   clubId: string;
   clubName: string;
+  category?: string;         // club category (driver, wood, iron, wedge, etc.)
   meanCarry: number;
   stdCarry: number;
   meanOffline: number;
@@ -94,6 +95,7 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
     const dist: ClubDistribution = {
       clubId: group.clubId,
       clubName: group.clubName,
+      category: group.category,
       meanCarry: mean(carries),
       stdCarry: stddev(carries),
       meanOffline: offlines.length > 0 ? mean(offlines) : 0,
@@ -115,6 +117,7 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
     distributions.push({
       clubId: group.clubId,
       clubName: group.clubName,
+      category: group.category,
       meanCarry: carry,
       stdCarry,
       meanOffline,

@@ -71,13 +71,16 @@ export function gaussianSample(mu: number, sigma: number): number {
 }
 
 export function greedyClub(target: number, clubs: ClubDistribution[]): ClubDistribution {
-  let best = clubs[0];
-  let bestDiff = Math.abs(clubs[0].meanCarry - target);
-  for (let i = 1; i < clubs.length; i++) {
-    const diff = Math.abs(clubs[i].meanCarry - target);
+  // Exclude drivers — greedy is for approach/recovery shots, not tee shots
+  const eligible = clubs.filter((c) => c.category !== 'driver');
+  const pool = eligible.length > 0 ? eligible : clubs; // fallback if all are drivers
+  let best = pool[0];
+  let bestDiff = Math.abs(pool[0].meanCarry - target);
+  for (let i = 1; i < pool.length; i++) {
+    const diff = Math.abs(pool[i].meanCarry - target);
     if (diff < bestDiff) {
       bestDiff = diff;
-      best = clubs[i];
+      best = pool[i];
     }
   }
   return best;
