@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
+import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { fileURLToPath } from 'url';
@@ -79,7 +80,7 @@ app.use(
     cookie: {
       secure: isProd,
       httpOnly: true,
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       sameSite: 'lax',
     },
   })
@@ -90,6 +91,18 @@ app.use('/api/auth', authRouter);
 
 // Auth middleware — protects all subsequent /api/* routes
 app.use('/api', requireAuth);
+
+// Global write rate limiter — generous for normal use, blocks abuse
+// Per-route limiters (login, extract) are stricter and take precedence
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Try again later.' },
+  skip: (req) => req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS',
+});
+app.use('/api', writeLimiter);
 
 // User management (admin-only endpoints handled inside router)
 app.use('/api/users', usersRouter);

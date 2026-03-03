@@ -1,8 +1,15 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { query, toCamel } from '../db.js';
 import { logger } from '../logger.js';
 
 const router = Router();
+
+const wedgeOverrideSchema = z.object({
+  clubId: z.string().uuid(),
+  position: z.string().min(1),
+  carry: z.number().positive(),
+});
 
 // GET /api/wedge-overrides — user's overrides
 router.get('/', async (req, res) => {
@@ -20,17 +27,11 @@ router.get('/', async (req, res) => {
 router.put('/', async (req, res) => {
   try {
     const userId = req.session.userId!;
-    const { clubId, position, carry } = req.body;
-
-    if (!clubId) {
-      return res.status(400).json({ error: 'clubId is required' });
+    const parsed = wedgeOverrideSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten().fieldErrors });
     }
-    if (!position) {
-      return res.status(400).json({ error: 'position is required' });
-    }
-    if (carry == null || typeof carry !== 'number' || carry <= 0) {
-      return res.status(400).json({ error: 'carry must be a positive number' });
-    }
+    const { clubId, position, carry } = parsed.data;
 
     await query(
       `INSERT INTO wedge_overrides (club_id, position, carry, user_id)

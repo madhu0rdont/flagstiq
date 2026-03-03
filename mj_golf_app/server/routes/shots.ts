@@ -1,32 +1,45 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { query, toCamel } from '../db.js';
 import { logger } from '../logger.js';
 
 const router = Router();
 
+const shotsQuerySchema = z.object({
+  since: z.coerce.number().int().positive().optional(),
+  clubId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(50000).optional(),
+});
+
 // GET /api/shots — user's shots (for yardage book computation)
 // Optional filters: ?since=TIMESTAMP, ?clubId=UUID, ?limit=N
 router.get('/', async (req, res) => {
   try {
+    const parsed = shotsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid query parameters', details: parsed.error.flatten().fieldErrors });
+    }
+    const { since, clubId, limit: queryLimit } = parsed.data;
+
     const userId = req.session.userId!;
     const conditions: string[] = ['shots.user_id = $1'];
     const values: unknown[] = [userId];
     let paramIndex = 2;
 
     // Only JOIN sessions when filtering by date (avoids unnecessary join for yardage book)
-    const needsSessionJoin = !!req.query.since;
+    const needsSessionJoin = !!since;
 
-    if (req.query.since) {
+    if (since) {
       conditions.push(`s.date >= $${paramIndex++}`);
-      values.push(Number(req.query.since));
+      values.push(since);
     }
-    if (req.query.clubId) {
+    if (clubId) {
       conditions.push(`shots.club_id = $${paramIndex++}`);
-      values.push(req.query.clubId);
+      values.push(clubId);
     }
 
     const where = `WHERE ${conditions.join(' AND ')}`;
-    const limit = Math.min(parseInt(req.query.limit as string) || 10000, 50000);
+    const limit = queryLimit ?? 10000;
     values.push(limit);
 
     const join = needsSessionJoin ? 'JOIN sessions s ON s.id = shots.session_id' : '';

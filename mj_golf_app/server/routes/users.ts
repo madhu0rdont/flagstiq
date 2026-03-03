@@ -7,6 +7,10 @@ import { requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
+function isValidEmail(email: string): boolean {
+  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(email);
+}
+
 // GET /api/users — list all users (admin only)
 // Excludes profile_picture blob to keep response small; use GET /api/users/:id/picture instead
 router.get('/', requireAdmin, async (_req, res) => {
@@ -57,39 +61,33 @@ router.post('/', requireAdmin, async (req, res) => {
     if (handedness && !['left', 'right'].includes(handedness)) {
       return res.status(400).json({ error: 'Handedness must be left or right' });
     }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (email && !isValidEmail(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
-    }
-
-    // Check for duplicate username
-    const { rows: existing } = await query(
-      'SELECT id FROM users WHERE lower(username) = lower($1)',
-      [username],
-    );
-    if (existing.length > 0) {
-      return res.status(409).json({ error: 'Username already exists' });
-    }
-
-    // Check for duplicate email
-    if (email) {
-      const { rows: emailExisting } = await query(
-        'SELECT id FROM users WHERE lower(email) = lower($1)',
-        [email],
-      );
-      if (emailExisting.length > 0) {
-        return res.status(409).json({ error: 'Email already in use' });
-      }
     }
 
     const id = crypto.randomUUID();
     const hash = await bcrypt.hash(password, 12);
     const now = Date.now();
 
-    await query(
-      `INSERT INTO users (id, username, password, display_name, email, role, handedness, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
-      [id, username.toLowerCase(), hash, displayName || username, email?.toLowerCase() || null, role || 'player', handedness || 'right', now],
-    );
+    try {
+      await query(
+        `INSERT INTO users (id, username, password, display_name, email, role, handedness, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+        [id, username.toLowerCase(), hash, displayName || username, email?.toLowerCase() || null, role || 'player', handedness || 'right', now],
+      );
+    } catch (err: any) {
+      if (err.code === '23505') {
+        const detail = String(err.detail || '');
+        if (detail.includes('username')) {
+          return res.status(409).json({ error: 'Username already exists' });
+        }
+        if (detail.includes('email')) {
+          return res.status(409).json({ error: 'Email already in use' });
+        }
+        return res.status(409).json({ error: 'Duplicate entry' });
+      }
+      throw err;
+    }
 
     res.status(201).json({
       id,
@@ -137,7 +135,7 @@ router.put('/me', async (req, res) => {
         values.push(null);
         sets.push(`email = $${values.length}`);
       } else {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (!isValidEmail(email)) {
           return res.status(400).json({ error: 'Invalid email format' });
         }
         // Check uniqueness (exclude current user)
@@ -241,7 +239,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
         values.push(null);
         sets.push(`email = $${values.length}`);
       } else {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (!isValidEmail(email)) {
           return res.status(400).json({ error: 'Invalid email format' });
         }
         const { rows: emailExisting } = await query(

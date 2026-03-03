@@ -85,7 +85,8 @@ router.post('/', extractLimiter, async (req, res) => {
 
     if (!response.ok) {
       const error = await response.text();
-      return res.status(response.status).json({ error: `Anthropic API error: ${error}` });
+      logger.error('Anthropic API error', { status: response.status, body: error });
+      return res.status(502).json({ error: 'Photo extraction failed. Try again later.' });
     }
 
     const data = await response.json();

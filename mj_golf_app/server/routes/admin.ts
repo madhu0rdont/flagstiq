@@ -17,7 +17,15 @@ router.use(requireAdmin);
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['application/vnd.google-earth.kml+xml', 'application/xml', 'text/xml'];
+    if (allowed.includes(file.mimetype) || file.originalname.endsWith('.kml')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only KML files are allowed'));
+    }
+  },
 });
 
 // --- Types ---
@@ -48,7 +56,7 @@ router.post('/import-kml', upload.single('file'), async (req, res) => {
     res.json(parsed);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to parse KML';
-    res.status(400).json({ error: message });
+    res.status(400).json({ error: `KML parse error: ${message}` });
   }
 });
 
@@ -85,8 +93,8 @@ router.post('/import-kml/confirm', async (req, res) => {
       elevMap.set(`${e.lat},${e.lng}`, e.elevation);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Elevation fetch failed';
-    return res.status(502).json({ error: message });
+    logger.error('Elevation fetch failed', { error: String(err) });
+    return res.status(502).json({ error: 'Failed to fetch elevation data' });
   }
 
   const getElev = (coord: { lat: number; lng: number }) =>
@@ -213,8 +221,7 @@ router.post('/import-kml/confirm', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error('Import confirm failed', { error: String(err) });
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    res.status(500).json({ error: `Import failed: ${message}` });
+    res.status(500).json({ error: 'Course import failed' });
   } finally {
     client.release();
   }
@@ -268,8 +275,8 @@ router.post('/courses/:id/refresh-elevation', async (req, res) => {
         elevMap.set(`${e.lat},${e.lng}`, e.elevation);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Elevation fetch failed';
-      return res.status(502).json({ error: message });
+      logger.error('Elevation fetch failed', { error: String(err) });
+      return res.status(502).json({ error: 'Failed to fetch elevation data' });
     }
 
     const getElev = (coord: { lat: number; lng: number }) =>
@@ -492,8 +499,7 @@ router.put('/hazard-penalties', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error('Hazard penalty update failed', { error: String(err) });
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    res.status(500).json({ error: message });
+    res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
   }

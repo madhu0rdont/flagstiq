@@ -114,8 +114,8 @@ describe('extract routes', () => {
           mediaType: 'image/png',
         });
 
-      expect(res.status).toBe(429);
-      expect(res.body.error).toContain('Anthropic API error');
+      expect(res.status).toBe(502);
+      expect(res.body.error).toBe('Photo extraction failed. Try again later.');
     });
 
     it('returns 500 on network/API error', async () => {
