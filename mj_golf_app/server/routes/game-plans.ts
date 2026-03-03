@@ -53,6 +53,60 @@ export async function markPlansStale(reason: string, courseId?: string, userId?:
 }
 
 // ---------------------------------------------------------------------------
+// Estimated handicap from cached scoring plans
+// ---------------------------------------------------------------------------
+
+router.get('/handicap', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const { rows } = await query(
+      `SELECT gpc.plan, c.par, c.rating, c.slope
+       FROM game_plan_cache gpc
+       JOIN courses c ON c.id = gpc.course_id
+       WHERE gpc.user_id = $1 AND gpc.mode = 'scoring' AND gpc.stale = FALSE`,
+      [userId],
+    );
+
+    const differentials: number[] = [];
+    for (const row of rows) {
+      const plan = typeof row.plan === 'string' ? JSON.parse(row.plan) : row.plan;
+      const totalExpected = plan.totalExpected;
+      if (typeof totalExpected !== 'number') continue;
+
+      const par = row.par as number;
+      const rating = row.rating as number | null;
+      const slope = row.slope as number | null;
+
+      // Skip 9-hole courses (par < 60) — scale them by 2x
+      if (par < 60) {
+        const scaled = totalExpected * 2;
+        if (rating && slope) {
+          differentials.push(((scaled - rating * 2) * 113) / (slope));
+        } else {
+          differentials.push(scaled - par * 2);
+        }
+      } else {
+        if (rating && slope) {
+          differentials.push(((totalExpected - rating) * 113) / slope);
+        } else {
+          differentials.push(totalExpected - par);
+        }
+      }
+    }
+
+    if (differentials.length === 0) {
+      return res.json({ handicap: null, courses: 0 });
+    }
+
+    const avg = differentials.reduce((a, b) => a + b, 0) / differentials.length;
+    res.json({ handicap: Math.round(avg * 10) / 10, courses: differentials.length });
+  } catch (err) {
+    logger.error('Failed to compute handicap estimate', { error: String(err) });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // History endpoints (registered BEFORE /:courseId/:teeBox/:mode)
 // ---------------------------------------------------------------------------
 
