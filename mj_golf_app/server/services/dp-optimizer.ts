@@ -349,12 +349,17 @@ function buildTransitionTable(
 // Value Iteration
 // ---------------------------------------------------------------------------
 
+interface ValueIterationResult {
+  policy: Map<number, PolicyEntry>;
+  values: Map<number, number>;
+}
+
 function valueIteration(
   zones: Zone[],
   table: TransitionTableEntry[],
   mode: ScoringMode,
   par: number,
-): Map<number, PolicyEntry> {
+): ValueIterationResult {
   const pin = zones[zones.length - 1].position;
 
   // Initialize values
@@ -458,7 +463,64 @@ function valueIteration(
     if (maxDelta < CONVERGENCE_THRESHOLD) break;
   }
 
-  return policy;
+  return { policy, values: V };
+}
+
+// ---------------------------------------------------------------------------
+// Alternative Tee Action (for diversity enforcement)
+// ---------------------------------------------------------------------------
+
+function findAlternativeTeeAction(
+  zones: Zone[],
+  table: TransitionTableEntry[],
+  values: Map<number, number>,
+  mode: ScoringMode,
+  par: number,
+  excludeClubs: Set<string>,
+  distributions: ClubDistribution[],
+): { clubIdx: number; bearing: number } | null {
+  const teeZone = zones[0];
+  const teeActions = table.filter((e) => e.key.zoneId === teeZone.id);
+
+  let bestValue = Infinity;
+  let bestAction: { clubIdx: number; bearing: number } | null = null;
+
+  for (const entry of teeActions) {
+    // Skip clubs that are already used by earlier strategies
+    if (excludeClubs.has(entry.club.clubName)) continue;
+
+    const { transitions, expectedPenalty, penaltyVariance, pGreen } = entry.result;
+
+    // Compute expected future value
+    let ev = 0;
+    let evSq = 0;
+    for (const [zId, prob] of transitions) {
+      const futureV = values.get(zId) ?? 10;
+      ev += prob * futureV;
+      evSq += prob * futureV * futureV;
+    }
+
+    const actionValue = 1 + expectedPenalty + ev;
+
+    let modeValue: number;
+    if (mode === 'scoring') {
+      modeValue = actionValue;
+    } else if (mode === 'safe') {
+      const futureVariance = evSq - ev * ev;
+      const totalStd = Math.sqrt(Math.max(0, penaltyVariance + futureVariance));
+      modeValue = actionValue + 0.5 * totalStd;
+    } else {
+      const birdieBonus = pGreen * 0.3;
+      modeValue = actionValue - birdieBonus;
+    }
+
+    if (modeValue < bestValue) {
+      bestValue = modeValue;
+      bestAction = { clubIdx: entry.key.clubIdx, bearing: entry.bearing };
+    }
+  }
+
+  return bestAction;
 }
 
 // ---------------------------------------------------------------------------
@@ -472,6 +534,7 @@ function extractPlan(
   hole: CourseHole,
   teeBox: string,
   mode: ScoringMode,
+  forcedFirstAction?: { clubIdx: number; bearing: number },
 ): NamedStrategyPlan {
   const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
   const shots: NamedStrategyPlan['shots'] = [];
@@ -482,19 +545,29 @@ function extractPlan(
   for (let i = 0; i < maxShots; i++) {
     if (currentZone.isTerminal) break;
 
-    const entry = policy.get(currentZone.id);
-    if (!entry) break;
+    // Use forced first action on the tee shot if provided
+    let clubIdx: number;
+    let bearing: number;
+    if (i === 0 && forcedFirstAction) {
+      clubIdx = forcedFirstAction.clubIdx;
+      bearing = forcedFirstAction.bearing;
+    } else {
+      const entry = policy.get(currentZone.id);
+      if (!entry) break;
+      clubIdx = entry.clubIdx;
+      bearing = entry.bearing;
+    }
 
     const clubs = getEligibleClubs(currentZone, distributions);
-    if (entry.clubIdx >= clubs.length) break;
+    if (clubIdx >= clubs.length) break;
 
-    const club = clubs[entry.clubIdx];
-    const aimPoint = projectPoint(currentZone.position, entry.bearing, club.meanCarry);
+    const club = clubs[clubIdx];
+    const aimPoint = projectPoint(currentZone.position, bearing, club.meanCarry);
 
     shots.push({ clubDist: club, aimPoint });
 
     // Simulate expected landing for next zone
-    const landing = projectPoint(currentZone.position, entry.bearing, club.meanCarry);
+    const landing = projectPoint(currentZone.position, bearing, club.meanCarry);
     const landingDist = haversineYards(landing, pin);
 
     if (landingDist <= GREEN_RADIUS) break;
@@ -702,23 +775,53 @@ export function dpOptimizeHole(
   if (table.length === 0) return [];
 
   const modes: ScoringMode[] = ['scoring', 'safe', 'aggressive'];
+  const policies: Map<number, PolicyEntry>[] = [];
+  const allValues: Map<number, number>[] = [];
+  const plans: NamedStrategyPlan[] = [];
   const results: OptimizedStrategy[] = [];
 
+  // 3. Value iteration for all modes
   for (const mode of modes) {
-    // 3. Value iteration for this mode
-    const policy = valueIteration(zones, table, mode, hole.par);
-    if (policy.size === 0) continue;
+    const { policy, values } = valueIteration(zones, table, mode, hole.par);
+    policies.push(policy);
+    allValues.push(values);
+  }
 
-    // 4. Extract optimal plan from policy
-    const plan = extractPlan(zones, policy, distributions, hole, teeBox, mode);
+  // 4. Extract initial plans
+  for (let i = 0; i < modes.length; i++) {
+    if (policies[i].size === 0) {
+      plans.push({ name: MODE_LABELS[modes[i]].name, type: MODE_LABELS[modes[i]].type, shots: [] });
+    } else {
+      plans.push(extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i]));
+    }
+  }
 
-    // 5. Run full MC simulation following the policy for accurate score distributions
-    const strategy = simulateWithPolicy(plan, hole, distributions, zones, policy);
+  // 5. Diversity enforcement — ensure different first-shot clubs
+  const usedFirstClubs = new Set<string>();
+  for (let i = 0; i < plans.length; i++) {
+    const firstClub = plans[i].shots[0]?.clubDist.clubName;
+    if (!firstClub) continue;
 
-    // Override strategy name/type from the plan (MC sim doesn't set these)
-    strategy.strategyName = plan.name;
-    strategy.strategyType = plan.type;
+    if (usedFirstClubs.has(firstClub)) {
+      // Find alternative tee action for this mode
+      const alt = findAlternativeTeeAction(
+        zones, table, allValues[i], modes[i], hole.par,
+        usedFirstClubs, distributions,
+      );
+      if (alt) {
+        plans[i] = extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i], alt);
+      }
+    }
+    usedFirstClubs.add(plans[i].shots[0]?.clubDist.clubName ?? '');
+  }
 
+  // 6. Run MC simulations
+  for (let i = 0; i < plans.length; i++) {
+    if (policies[i].size === 0) continue;
+
+    const strategy = simulateWithPolicy(plans[i], hole, distributions, zones, policies[i]);
+    strategy.strategyName = plans[i].name;
+    strategy.strategyType = plans[i].type;
     results.push(strategy);
   }
 
