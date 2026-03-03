@@ -58,6 +58,7 @@ const ZONE_INTERVAL = 20;        // yards between zone markers along centerline
 const LATERAL_OFFSET = 20;       // yards left/right of centerline
 const BEARING_STEP = 2;          // degrees (finer resolution for narrow fairway windows)
 const BEARING_RANGE = 30;        // ±degrees from pin bearing
+const TEE_LOOK_AHEAD = 200;     // yards — center tee bearing fan on driver landing zone
 const SAMPLES_PER_ACTION = 200;
 const GREEN_RADIUS = 10;         // yards — terminal zone threshold
 const ROUGH_LIE_MULTIPLIER = 1.15; // rough increases std by 15%
@@ -94,9 +95,11 @@ export function discretizeHole(
   const greenPoly = hole.green ?? [];
   const zones: Zone[] = [];
 
-  // Tee zone — localBearing points down the first centerLine segment
+  // Tee zone — look ahead to the driver landing zone (~200y), not just 20y.
+  // On doglegs, the first 20y is straight; the curve is at 150-250y.
+  const teeLookAhead = Math.min(TEE_LOOK_AHEAD, totalDist - GREEN_RADIUS);
   const teeBearing = centerLine.length >= 2
-    ? bearingBetween(tee, interpolateCenterLine(centerLine, tee, heading, ZONE_INTERVAL))
+    ? bearingBetween(tee, interpolateCenterLine(centerLine, tee, heading, teeLookAhead))
     : heading;
   zones.push({
     id: 0,

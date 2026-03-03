@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.5.7 — Dogleg Tee Bearing Fix
+- Fix DP optimizer bearing selection on dogleg holes: tee bearing now looks 200 yards ahead on the center line (driver landing zone) instead of only 20 yards, so the ±30° bearing fan is centered on where drives actually land
+- On doglegs, the first 20y of the hole is straight — the curve happens at 150-250y. The old 20y look-ahead centered the bearing fan on the pre-curve direction, causing the optimizer to miss fairway-following bearings entirely on sharp doglegs
+- Straight holes are unaffected (center line at 20y and 200y point the same direction)
+
 ## v1.5.6 — Homepage Improvements & Worker Threads
 - Dynamic user name: homepage title now shows the logged-in user's first name instead of hardcoded "Madhu's"
 - Bag button promoted to same size/styling as Play and Practice in a 3-column grid
@@ -11,6 +16,10 @@
 - Composite index on `shots(user_id, session_id)` for faster yardage book queries
 - SWR exponential backoff for stale plan polling (3s→6s→12s→30s cap)
 - Parallel plan regeneration: 2 concurrent worker threads with pre-loaded course data
+- Scoped SWR session revalidation: only refetch list keys, not shot detail sub-keys
+- Conditional JOIN in `/api/shots`: skip sessions join when `?since` filter not used
+- Covering index on `game_plan_history` for faster history list queries
+- Lazy-load profile picture avatars: list endpoint excludes blobs, separate `/api/users/:id/picture` endpoint
 
 ## v1.5.5 — Fairway-Aware Bearing Selection
 - Finer bearing resolution: `BEARING_STEP` reduced from 5° to 2° (31 bearings per zone instead of 13), enabling the optimizer to resolve narrow fairway windows
