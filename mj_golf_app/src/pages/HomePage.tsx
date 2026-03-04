@@ -1,5 +1,6 @@
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
-import { MapPin, Plus, Briefcase } from 'lucide-react';
+import { MapPin, Plus, Briefcase, Info } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { useAuth } from '../context/AuthContext';
 import { useHandicap } from '../hooks/useHandicap';
@@ -7,9 +8,51 @@ import { useRecentSessions } from '../hooks/useSessions';
 import { useAllClubs } from '../hooks/useClubs';
 import { useCourses } from '../hooks/useCourses';
 
+function CoursesTrackedRow({ courseCount, courseNames }: { courseCount: number; courseNames: string[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  return (
+    <div className="relative flex items-center gap-2" ref={ref}>
+      <div className="h-1.5 w-1.5 rounded-full bg-fairway flex-shrink-0" />
+      <span className="font-mono text-[0.7rem] text-forest tracking-wide">
+        <strong className="text-turf">{courseCount}</strong> course{courseCount !== 1 ? 's' : ''} tracked
+      </span>
+      {courseNames.length > 0 && (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center justify-center text-sage hover:text-turf transition-colors -ml-0.5"
+          aria-label="Show courses used in handicap"
+        >
+          <Info size={13} />
+        </button>
+      )}
+      {open && courseNames.length > 0 && (
+        <div className="absolute left-0 top-full mt-1 z-20 rounded-lg border border-sand bg-white shadow-md px-3 py-2 min-w-[160px]">
+          <p className="font-mono text-[0.55rem] tracking-[0.15em] uppercase text-sand mb-1.5">Courses in calc</p>
+          <ul className="flex flex-col gap-1">
+            {courseNames.map((name) => (
+              <li key={name} className="font-mono text-[0.7rem] text-forest">{name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function HomePage() {
   const { user } = useAuth();
-  const { handicap, courseCount } = useHandicap();
+  const { handicap, courseCount, courseNames } = useHandicap();
   const recentSessions = useRecentSessions(3);
   const clubs = useAllClubs();
   const { courses } = useCourses();
@@ -50,12 +93,7 @@ export function HomePage() {
                 </div>
               </div>
               <div className="bg-parchment border border-sand px-6 py-4.5 rounded-r-2xl flex flex-col justify-center gap-2 flex-1">
-                <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-1.5 rounded-full bg-fairway flex-shrink-0" />
-                  <span className="font-mono text-[0.7rem] text-forest tracking-wide">
-                    <strong className="text-turf">{courseCount}</strong> course{courseCount !== 1 ? 's' : ''} tracked
-                  </span>
-                </div>
+                <CoursesTrackedRow courseCount={courseCount} courseNames={courseNames} />
                 {homeCourse && (
                   <div className="flex items-center gap-2">
                     <div className="h-1.5 w-1.5 rounded-full bg-gold flex-shrink-0" />

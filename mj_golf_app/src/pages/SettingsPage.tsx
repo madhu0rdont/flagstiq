@@ -216,8 +216,9 @@ export function SettingsPage() {
               <div className="flex items-center gap-2">
                 {(() => {
                   const selected = courses?.find(c => c.id === homeCourseId);
-                  const logoKey = selected ? getCourseLogoKey(selected.name) : undefined;
-                  const logoUrl = logoKey ? COURSE_LOGOS[logoKey] : null;
+                  if (!selected) return null;
+                  const logoKey = getCourseLogoKey(selected.name);
+                  const logoUrl = selected.logo || (logoKey ? COURSE_LOGOS[logoKey] : null);
                   return logoUrl ? (
                     <img src={logoUrl} alt="" className="h-6 w-6 rounded object-contain flex-shrink-0" />
                   ) : null;

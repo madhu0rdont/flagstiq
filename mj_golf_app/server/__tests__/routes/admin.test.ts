@@ -123,6 +123,90 @@ describe('admin routes', () => {
     });
   });
 
+  // ── PUT /courses/:id/logo ───────────────────────────────────────
+  describe('PUT /courses/:id/logo', () => {
+    const validDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+
+    it('uploads a valid logo and returns updated course', async () => {
+      // UPDATE returns rowCount 1
+      mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+      // SELECT returns updated course
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'c1', name: 'Test Course', logo: validDataUrl, created_at: 1000, updated_at: 2000 }],
+      });
+
+      const res = await request(app)
+        .put('/courses/c1/logo')
+        .send({ logo: validDataUrl });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id: 'c1', name: 'Test Course', logo: validDataUrl });
+      // Verify UPDATE was called with correct params
+      const updateCall = mockQuery.mock.calls[0];
+      expect(updateCall[0]).toMatch(/UPDATE courses SET logo/);
+      expect(updateCall[1][0]).toBe(validDataUrl);
+      expect(updateCall[1][2]).toBe('c1');
+    });
+
+    it('clears logo when null is sent', async () => {
+      mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'c1', name: 'Test Course', logo: null, created_at: 1000, updated_at: 2000 }],
+      });
+
+      const res = await request(app)
+        .put('/courses/c1/logo')
+        .send({ logo: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.logo).toBeNull();
+      const updateCall = mockQuery.mock.calls[0];
+      expect(updateCall[1][0]).toBeNull();
+    });
+
+    it('returns 400 for non-data-URL string', async () => {
+      const res = await request(app)
+        .put('/courses/c1/logo')
+        .send({ logo: 'https://example.com/logo.png' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/data URL/i);
+    });
+
+    it('returns 400 when logo exceeds size limit', async () => {
+      const oversized = 'data:image/jpeg;base64,' + 'A'.repeat(300_000);
+
+      const res = await request(app)
+        .put('/courses/c1/logo')
+        .send({ logo: oversized });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/too large/i);
+    });
+
+    it('returns 404 when course does not exist', async () => {
+      mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+      const res = await request(app)
+        .put('/courses/nonexistent/logo')
+        .send({ logo: validDataUrl });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toMatch(/not found/i);
+    });
+
+    it('returns 500 on database error', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('DB error'));
+
+      const res = await request(app)
+        .put('/courses/c1/logo')
+        .send({ logo: validDataUrl });
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/internal/i);
+    });
+  });
+
   // ── GET /hazard-penalties ────────────────────────────────────────
   describe('GET /hazard-penalties', () => {
     it('returns hazard penalties', async () => {

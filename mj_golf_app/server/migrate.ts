@@ -386,6 +386,9 @@ export async function migrate() {
   // Home course preference
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS home_course_id TEXT REFERENCES courses(id)`);
 
+  // Course logo (base64 data URL)
+  await query(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS logo TEXT`);
+
   // ── Auth flows: user status + password reset tokens ──
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' NOT NULL`);
 

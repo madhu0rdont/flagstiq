@@ -544,6 +544,39 @@ router.patch('/:id/holes/:number', async (req, res) => {
   res.json(toCamel(rows[0]));
 });
 
+// PUT /api/admin/courses/:id/logo — upload or clear course logo
+router.put('/courses/:id/logo', async (req, res) => {
+  const courseId = req.params.id;
+  const { logo } = req.body as { logo: string | null };
+
+  // Allow null to clear
+  if (logo !== null) {
+    if (typeof logo !== 'string' || !logo.startsWith('data:')) {
+      return res.status(400).json({ error: 'Logo must be a data URL or null' });
+    }
+    // Check size (~200KB limit for base64)
+    if (logo.length > 300_000) {
+      return res.status(400).json({ error: 'Logo too large (max ~200KB)' });
+    }
+  }
+
+  try {
+    const now = Date.now();
+    const { rowCount } = await query(
+      'UPDATE courses SET logo = $1, updated_at = $2 WHERE id = $3',
+      [logo, now, courseId],
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+    const { rows } = await query('SELECT * FROM courses WHERE id = $1', [courseId]);
+    res.json(toCamel(rows[0]));
+  } catch (err) {
+    logger.error('Course logo update failed', { error: String(err) });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE /api/admin/:id/holes/geofence — batch-clear geofence data for a range of holes
 router.delete('/:id/holes/geofence', async (req, res) => {
   try {

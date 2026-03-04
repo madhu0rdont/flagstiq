@@ -47,6 +47,7 @@ export interface Course {
   slope: number | null;
   rating: number | null;
   designers: string[];
+  logo?: string;
   createdAt: number;
   updatedAt: number;
 }

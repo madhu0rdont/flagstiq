@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
-import { Map, Shield, Upload, ChevronLeft, MapPin, Users, LogOut } from 'lucide-react';
+import { Map, Shield, Upload, ChevronLeft, MapPin, Users, LogOut, Camera, Loader2 } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { LoadingPage } from '../components/ui/LoadingPage';
 import { KmlImporter } from '../components/admin/KmlImporter';
@@ -8,8 +8,9 @@ import { HazardMapper } from '../components/admin/HazardMapper';
 import { ElevationRefresh } from '../components/admin/ElevationRefresh';
 import { PenaltyEditor } from '../components/admin/PenaltyEditor';
 import { UserManager } from '../components/admin/UserManager';
-import { useCourses, useCourse, mutateCourses } from '../hooks/useCourses';
+import { useCourses, useCourse, mutateCourses, mutateCourse } from '../hooks/useCourses';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 import type { Course, CourseHole, HazardFeature } from '../models/course';
 
 const COURSE_LOGOS: Record<string, string> = {
@@ -25,6 +26,31 @@ const COURSE_LOGOS: Record<string, string> = {
 function getCourseLogoKey(name: string): string | undefined {
   const lower = name.toLowerCase();
   return Object.keys(COURSE_LOGOS).find((key) => lower.includes(key));
+}
+
+/** Resize an image file to maxSize x maxSize, return base64 data URL */
+function resizeImage(file: File, maxSize: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      canvas.width = maxSize;
+      canvas.height = maxSize;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, maxSize, maxSize);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    img.src = url;
+  });
 }
 
 type View = 'dashboard' | 'course-grid' | 'course-edit' | 'penalties' | 'import' | 'users';
@@ -47,7 +73,7 @@ function AdminCourseCard({ course }: { course: Course }) {
   ].filter(Boolean);
 
   const logoKey = getCourseLogoKey(course.name);
-  const logoUrl = logoKey ? COURSE_LOGOS[logoKey] : null;
+  const logoUrl = course.logo || (logoKey ? COURSE_LOGOS[logoKey] : null);
 
   return (
     <button
@@ -55,7 +81,7 @@ function AdminCourseCard({ course }: { course: Course }) {
       className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-4 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
     >
       {logoUrl ? (
-        <img src={logoUrl} alt={course.name} className="h-12 w-12 object-contain" />
+        <img src={logoUrl} alt={course.name} className="h-12 w-12 object-contain rounded" />
       ) : (
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-turf/10">
           <MapPin size={20} className="text-turf" />
@@ -72,6 +98,8 @@ function AdminCourseCard({ course }: { course: Course }) {
 function CourseSummaryHeader({ courseId }: { courseId: string }) {
   const navigate = useNavigate();
   const { course } = useCourse(courseId);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const stats = useMemo(() => {
     if (!course) return null;
@@ -90,7 +118,25 @@ function CourseSummaryHeader({ courseId }: { courseId: string }) {
     return { mapped, teeBoxes: teeKeys.size };
   }, [course]);
 
+  const handleLogoSelect = useCallback(async (file: File) => {
+    if (!course) return;
+    setUploading(true);
+    try {
+      const dataUrl = await resizeImage(file, 128);
+      await api.put(`/admin/courses/${course.id}/logo`, { logo: dataUrl });
+      mutateCourse(course.id);
+      mutateCourses();
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setUploading(false);
+    }
+  }, [course]);
+
   if (!course) return null;
+
+  const logoKey = getCourseLogoKey(course.name);
+  const logoUrl = course.logo || (logoKey ? COURSE_LOGOS[logoKey] : null);
 
   const details = [
     course.par ? `Par ${course.par}` : null,
@@ -107,15 +153,42 @@ function CourseSummaryHeader({ courseId }: { courseId: string }) {
         <ChevronLeft size={16} />
         <span className="text-xs font-medium">All Courses</span>
       </button>
-      <p className="text-base font-semibold text-text-dark">{course.name}</p>
-      {details.length > 0 && (
-        <p className="text-xs text-text-muted mt-0.5">{details.join(' · ')}</p>
-      )}
-      {stats && (
-        <p className="text-xs text-text-muted mt-0.5">
-          {stats.mapped}/18 holes mapped{stats.teeBoxes > 0 ? ` · ${stats.teeBoxes} tee box${stats.teeBoxes !== 1 ? 'es' : ''} with data` : ''}
-        </p>
-      )}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => logoInputRef.current?.click()}
+          disabled={uploading}
+          className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl bg-surface border border-border overflow-hidden hover:border-fairway transition-all"
+        >
+          {uploading ? (
+            <Loader2 size={20} className="animate-spin text-text-muted" />
+          ) : logoUrl ? (
+            <img src={logoUrl} alt={course.name} className="h-full w-full object-contain" />
+          ) : (
+            <MapPin size={22} className="text-turf" />
+          )}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity">
+            <Camera size={16} className="text-white" />
+          </div>
+        </button>
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => e.target.files?.[0] && handleLogoSelect(e.target.files[0])}
+          className="hidden"
+        />
+        <div className="min-w-0">
+          <p className="text-base font-semibold text-text-dark">{course.name}</p>
+          {details.length > 0 && (
+            <p className="text-xs text-text-muted mt-0.5">{details.join(' · ')}</p>
+          )}
+          {stats && (
+            <p className="text-xs text-text-muted mt-0.5">
+              {stats.mapped}/18 holes mapped{stats.teeBoxes > 0 ? ` · ${stats.teeBoxes} tee box${stats.teeBoxes !== 1 ? 'es' : ''} with data` : ''}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

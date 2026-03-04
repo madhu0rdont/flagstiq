@@ -58,7 +58,7 @@ router.get('/handicap', async (req, res) => {
   try {
     const userId = req.session.userId!;
     const { rows } = await query(
-      `SELECT gpc.plan, c.par, c.rating, c.slope
+      `SELECT gpc.plan, c.name, c.par, c.rating, c.slope
        FROM game_plan_cache gpc
        JOIN courses c ON c.id = gpc.course_id
        WHERE gpc.user_id = $1 AND gpc.mode = 'scoring'`,
@@ -66,6 +66,7 @@ router.get('/handicap', async (req, res) => {
     );
 
     const differentials: number[] = [];
+    const courseNames: string[] = [];
     for (const row of rows) {
       const plan = typeof row.plan === 'string' ? JSON.parse(row.plan) : row.plan;
       const totalExpected = plan.totalExpected;
@@ -90,14 +91,15 @@ router.get('/handicap', async (req, res) => {
           differentials.push(totalExpected - par);
         }
       }
+      courseNames.push(row.name as string);
     }
 
     if (differentials.length === 0) {
-      return res.json({ handicap: null, courses: 0 });
+      return res.json({ handicap: null, courses: 0, courseNames: [] });
     }
 
     const avg = differentials.reduce((a, b) => a + b, 0) / differentials.length;
-    res.json({ handicap: Math.round(avg * 10) / 10, courses: differentials.length });
+    res.json({ handicap: Math.round(avg * 10) / 10, courses: differentials.length, courseNames });
   } catch (err) {
     logger.error('Failed to compute handicap estimate', { error: String(err) });
     res.status(500).json({ error: 'Internal server error' });

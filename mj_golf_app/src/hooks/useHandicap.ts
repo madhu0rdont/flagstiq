@@ -4,6 +4,7 @@ import { fetcher } from '../lib/fetcher';
 interface HandicapData {
   handicap: number | null;
   courses: number;
+  courseNames: string[];
 }
 
 export function useHandicap() {
@@ -15,6 +16,7 @@ export function useHandicap() {
   return {
     handicap: data?.handicap ?? null,
     courseCount: data?.courses ?? 0,
+    courseNames: data?.courseNames ?? [],
     isLoading,
   };
 }
