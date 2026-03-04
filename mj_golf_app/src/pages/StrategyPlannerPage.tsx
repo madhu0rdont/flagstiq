@@ -46,7 +46,7 @@ function CourseCard({ course, onSelect }: { course: Course; onSelect: (id: strin
   ].filter(Boolean);
 
   const logoKey = getCourseLogoKey(course.name);
-  const logoUrl = logoKey ? COURSE_LOGOS[logoKey] : null;
+  const logoUrl = course.logo || (logoKey ? COURSE_LOGOS[logoKey] : null);
 
   return (
     <button
@@ -54,7 +54,7 @@ function CourseCard({ course, onSelect }: { course: Course; onSelect: (id: strin
       className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-4 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
     >
       {logoUrl ? (
-        <img src={logoUrl} alt={course.name} className="h-12 w-12 object-contain" />
+        <img src={logoUrl} alt={course.name} className="h-12 w-12 object-contain rounded" />
       ) : (
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-turf/10">
           <MapPin size={20} className="text-turf" />
