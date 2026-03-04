@@ -4,19 +4,17 @@ import crypto from 'node:crypto';
 import { query, withTransaction } from '../db.js';
 import { logger } from '../logger.js';
 import { requireAdmin } from '../middleware/auth.js';
+import { isValidEmail } from '../utils/validation.js';
+import { sendAccountApprovedEmail } from '../services/email.js';
 
 const router = Router();
-
-function isValidEmail(email: string): boolean {
-  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(email);
-}
 
 // GET /api/users — list all users (admin only)
 // Excludes profile_picture blob to keep response small; use GET /api/users/:id/picture instead
 router.get('/', requireAdmin, async (_req, res) => {
   try {
     const { rows } = await query(
-      'SELECT id, username, display_name, email, (profile_picture IS NOT NULL) AS has_picture, role, handedness, created_at, updated_at FROM users ORDER BY created_at',
+      'SELECT id, username, display_name, email, (profile_picture IS NOT NULL) AS has_picture, role, handedness, status, created_at, updated_at FROM users ORDER BY created_at',
     );
     res.json(rows.map((r) => ({
       id: r.id,
@@ -26,6 +24,7 @@ router.get('/', requireAdmin, async (_req, res) => {
       hasProfilePicture: r.has_picture,
       role: r.role,
       handedness: r.handedness,
+      status: r.status,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     })));
@@ -317,6 +316,37 @@ router.post('/:id/clear-data', requireAdmin, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error('Failed to clear user data', { error: String(err) });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/users/:id/status — approve or reject a user (admin only)
+router.put('/:id/status', requireAdmin, async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    const { status } = req.body;
+
+    if (!status || !['active', 'pending', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be active, pending, or rejected' });
+    }
+
+    const { rows } = await query('SELECT id, email, display_name, username, status AS current_status FROM users WHERE id = $1', [targetId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = rows[0];
+    await query('UPDATE users SET status = $1, updated_at = $2 WHERE id = $3', [status, Date.now(), targetId]);
+
+    // Send approval email if transitioning to active
+    if (status === 'active' && user.current_status !== 'active' && user.email) {
+      sendAccountApprovedEmail(user.email, user.display_name || user.username).catch(() => {});
+    }
+
+    logger.info(`User ${targetId} status changed to ${status}`);
+    res.json({ id: targetId, status });
+  } catch (err) {
+    logger.error('Failed to update user status', { error: String(err) });
     res.status(500).json({ error: 'Internal server error' });
   }
 });

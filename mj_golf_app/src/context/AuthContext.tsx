@@ -8,6 +8,7 @@ export interface User {
   profilePicture?: string;
   role: 'admin' | 'player';
   handedness: 'left' | 'right';
+  status: 'active' | 'pending' | 'rejected';
 }
 
 interface AuthContextValue {
@@ -16,7 +17,7 @@ interface AuthContextValue {
   needsSetup: boolean;
   user: User | null;
   isAdmin: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string; user?: User }>;
+  login: (identifier: string, password: string) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
   setup: (data: {
@@ -26,6 +27,14 @@ interface AuthContextValue {
     playerPassword: string;
     playerDisplayName?: string;
   }) => Promise<{ success: boolean; error?: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  resetPassword: (token: string, password: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  register: (data: {
+    username: string;
+    email: string;
+    password: string;
+    displayName?: string;
+  }) => Promise<{ success: boolean; message?: string; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -50,11 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (identifier: string, password: string) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ identifier, password }),
     });
 
     if (res.ok) {
@@ -111,6 +120,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const forgotPassword = useCallback(async (email: string) => {
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok) return { success: true, message: data.message };
+      return { success: false, error: data.error || 'Request failed' };
+    } catch {
+      return { success: false, error: 'Request failed' };
+    }
+  }, []);
+
+  const resetPassword = useCallback(async (token: string, password: string) => {
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ token, password }),
+      });
+      const data = await res.json();
+      if (res.ok) return { success: true, message: data.message };
+      return { success: false, error: data.error || 'Reset failed' };
+    } catch {
+      return { success: false, error: 'Reset failed' };
+    }
+  }, []);
+
+  const register = useCallback(async (data: {
+    username: string;
+    email: string;
+    password: string;
+    displayName?: string;
+  }) => {
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (res.ok) return { success: true, message: result.message };
+      return { success: false, error: result.error || 'Registration failed' };
+    } catch {
+      return { success: false, error: 'Registration failed' };
+    }
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       isAuthenticated,
@@ -122,6 +181,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       updateUser,
       setup,
+      forgotPassword,
+      resetPassword,
+      register,
     }}>
       {children}
     </AuthContext.Provider>

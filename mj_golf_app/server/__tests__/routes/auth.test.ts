@@ -23,6 +23,13 @@ vi.mock('../../db.js', () => ({
   query: (...args: unknown[]) => mockQuery(...args),
 }));
 
+// Mock email service
+vi.mock('../../services/email.js', () => ({
+  sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: vi.fn().mockResolvedValue(undefined),
+  sendAccountApprovedEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
 import authRouter from '../../routes/auth.js';
 
 function createAuthApp() {
@@ -54,8 +61,10 @@ const testUser = {
   username: 'mj',
   password: '$2b$12$hashedpassword',
   display_name: 'MJ',
+  email: 'mj@example.com',
   role: 'player',
   handedness: 'left',
+  status: 'active',
 };
 
 describe('auth routes', () => {
@@ -73,7 +82,7 @@ describe('auth routes', () => {
 
       const res = await request(app)
         .post('/login')
-        .send({ username: 'mj', password: 'correct' });
+        .send({ identifier: 'mj', password: 'correct' });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -83,6 +92,7 @@ describe('auth routes', () => {
         displayName: 'MJ',
         role: 'player',
         handedness: 'left',
+        status: 'active',
       });
     });
 
@@ -92,10 +102,10 @@ describe('auth routes', () => {
 
       const res = await request(app)
         .post('/login')
-        .send({ username: 'mj', password: 'wrong' });
+        .send({ identifier: 'mj', password: 'wrong' });
 
       expect(res.status).toBe(401);
-      expect(res.body.error).toBe('Invalid username or password');
+      expect(res.body.error).toBe('Invalid credentials');
     });
 
     it('returns 401 when user not found', async () => {
@@ -103,19 +113,55 @@ describe('auth routes', () => {
 
       const res = await request(app)
         .post('/login')
-        .send({ username: 'nobody', password: 'test' });
+        .send({ identifier: 'nobody', password: 'test' });
 
       expect(res.status).toBe(401);
-      expect(res.body.error).toBe('Invalid username or password');
+      expect(res.body.error).toBe('Invalid credentials');
     });
 
-    it('returns 400 when username or password missing', async () => {
+    it('returns 400 when identifier or password missing', async () => {
       const res = await request(app)
         .post('/login')
-        .send({ username: 'mj' });
+        .send({ identifier: 'mj' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Username and password are required');
+      expect(res.body.error).toBe('Email/username and password are required');
+    });
+
+    it('returns 403 when user is pending', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ ...testUser, status: 'pending' }] });
+      mockCompare.mockResolvedValueOnce(true);
+
+      const res = await request(app)
+        .post('/login')
+        .send({ identifier: 'mj', password: 'correct' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Account pending approval');
+    });
+
+    it('returns 403 when user is rejected', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ ...testUser, status: 'rejected' }] });
+      mockCompare.mockResolvedValueOnce(true);
+
+      const res = await request(app)
+        .post('/login')
+        .send({ identifier: 'mj', password: 'correct' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Account has been rejected');
+    });
+
+    it('supports login by email', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [testUser] });
+      mockCompare.mockResolvedValueOnce(true);
+
+      const res = await request(app)
+        .post('/login')
+        .send({ identifier: 'mj@example.com', password: 'correct' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
     });
   });
 
@@ -193,6 +239,106 @@ describe('auth routes', () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.user.role).toBe('player');
+    });
+  });
+
+  // ── POST /forgot-password ────────────────────────────────────────
+  describe('POST /forgot-password', () => {
+    it('returns 200 even when email not found (no enumeration)', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // no user
+
+      const res = await request(app)
+        .post('/forgot-password')
+        .send({ email: 'nobody@example.com' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('If an account exists');
+    });
+
+    it('returns 400 on invalid email', async () => {
+      const res = await request(app)
+        .post('/forgot-password')
+        .send({ email: 'not-an-email' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ── POST /reset-password ─────────────────────────────────────────
+  describe('POST /reset-password', () => {
+    it('returns 400 when token not found', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // no token
+
+      const res = await request(app)
+        .post('/reset-password')
+        .send({ token: 'a'.repeat(64), password: 'newpassword123' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Invalid or expired reset link');
+    });
+
+    it('returns 400 when password too short', async () => {
+      const res = await request(app)
+        .post('/reset-password')
+        .send({ token: 'a'.repeat(64), password: 'short' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Password must be at least 8 characters');
+    });
+  });
+
+  // ── POST /register ───────────────────────────────────────────────
+  describe('POST /register', () => {
+    it('creates a pending user on valid input', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // insert succeeds
+
+      const res = await request(app)
+        .post('/register')
+        .send({
+          username: 'newuser',
+          email: 'new@example.com',
+          password: 'password123',
+          displayName: 'New User',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.message).toContain('Pending');
+    });
+
+    it('returns 400 on missing fields', async () => {
+      const res = await request(app)
+        .post('/register')
+        .send({ username: 'newuser' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 409 on duplicate username', async () => {
+      mockQuery.mockRejectedValueOnce({ code: '23505', detail: 'Key (username)=(newuser)' });
+
+      const res = await request(app)
+        .post('/register')
+        .send({
+          username: 'newuser',
+          email: 'new@example.com',
+          password: 'password123',
+        });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toContain('Username');
+    });
+
+    it('returns 400 on short password', async () => {
+      const res = await request(app)
+        .post('/register')
+        .send({
+          username: 'newuser',
+          email: 'new@example.com',
+          password: 'short',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('8 characters');
     });
   });
 });

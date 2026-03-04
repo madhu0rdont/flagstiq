@@ -12,6 +12,7 @@ interface UserRecord {
   hasProfilePicture?: boolean;
   role: 'admin' | 'player';
   handedness: 'left' | 'right';
+  status: 'active' | 'pending' | 'rejected';
   createdAt: number;
 }
 
@@ -179,6 +180,26 @@ export function UserManager() {
     }
   };
 
+  const handleStatusChange = async (userId: string, status: 'active' | 'rejected') => {
+    try {
+      const res = await fetch(`/api/users/${userId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Failed to update status');
+      }
+      mutate();
+    } catch {
+      setError('Failed to update status');
+    }
+  };
+
+  const pendingUsers = users?.filter((u) => u.status === 'pending') || [];
+  const activeUsers = users?.filter((u) => u.status !== 'pending') || [];
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -226,8 +247,47 @@ export function UserManager() {
         </form>
       )}
 
+      {/* Pending Users */}
+      {pendingUsers.length > 0 && (
+        <div className="space-y-2">
+          <p className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Pending Approval</p>
+          {pendingUsers.map((u) => (
+            <div key={u.id} className="flex items-center justify-between rounded-xl border border-gold/40 bg-gold/5 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <UserAvatar user={u} />
+                <div>
+                  <p className="text-sm font-medium text-text-dark">
+                    {u.displayName || u.username}
+                    <span className="ml-2 text-xs text-text-muted">@{u.username}</span>
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    {u.email && `${u.email} · `}
+                    Pending
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleStatusChange(u.id, 'active')}
+                  className="rounded-lg bg-turf px-3 py-1.5 text-xs font-medium text-white hover:bg-fairway transition-colors"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => handleStatusChange(u.id, 'rejected')}
+                  className="rounded-lg border border-coral/40 px-3 py-1.5 text-xs font-medium text-coral hover:bg-coral/10 transition-colors"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Active Users */}
       <div className="space-y-2">
-        {users?.map((u) => (
+        {activeUsers.map((u) => (
           <div key={u.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
             <div className="flex items-center gap-3">
               <UserAvatar user={u} />
@@ -235,6 +295,9 @@ export function UserManager() {
                 <p className="text-sm font-medium text-text-dark">
                   {u.displayName || u.username}
                   <span className="ml-2 text-xs text-text-muted">@{u.username}</span>
+                  {u.status === 'rejected' && (
+                    <span className="ml-2 rounded-[6px] bg-coral/10 px-1.5 py-0.5 text-[10px] font-medium text-coral">Rejected</span>
+                  )}
                 </p>
                 <p className="text-xs text-text-muted">
                   {u.role === 'admin' ? 'Admin' : 'Player'}

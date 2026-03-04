@@ -2,10 +2,16 @@ import { RouterProvider } from 'react-router';
 import { SettingsProvider } from './context/SettingsContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { router, adminRouter } from './router';
 
 function AuthGate() {
   const { isAuthenticated, isLoading, user } = useAuth();
+
+  // Allow /reset-password route without authentication
+  if (window.location.pathname === '/reset-password') {
+    return <ResetPasswordPage />;
+  }
 
   if (isLoading) return null;
 
