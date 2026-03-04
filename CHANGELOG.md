@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.6.0 — Auth Flows & Login Redesign
+- Forgot password flow with email magic link (Resend API, SHA-256 hashed tokens, 1-hour expiry)
+- Open registration with admin approval: new users land in "pending" status until an admin approves
+- Login accepts both email and username
+- Redesigned login page with multi-view state machine: sign in, create account, forgot password, confirmation screens
+- Password reset page at `/reset-password?token=...` (accessible without auth)
+- Admin UserManager shows pending users with Approve/Reject buttons and status badges
+- Database: `status` column on users table, `password_reset_tokens` table
+- New server endpoints: `POST /forgot-password`, `POST /reset-password`, `POST /register`, `PUT /users/:id/status`
+- Shared validation utils extracted (`isValidEmail`, `isValidPassword`)
+- 20 auth tests covering login, status checks, registration, forgot/reset password flows
+
 ## v1.5.9 — Test Coverage & Course Logos
 - Add test coverage for users, shots, and wedge-overrides routes (66 new tests)
 - Tests cover admin CRUD, race condition handling (23505), Zod validation, email regex, role guards
