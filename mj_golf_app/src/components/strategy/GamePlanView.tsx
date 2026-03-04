@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { FileDown, Copy, Play, Flag, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { exportGamePlanPDF } from '../../services/game-plan-pdf';
@@ -190,6 +191,92 @@ function HoleCard({ hole, isKeyHole }: { hole: HolePlan; isKeyHole?: boolean }) 
   );
 }
 
+// Descriptive messages about what the optimizer is doing at each phase
+const PHASE_MESSAGES = [
+  'Surveying the course layout...',
+  'Modeling tee shot landing zones...',
+  'Simulating approach angles...',
+  'Evaluating hazard risk corridors...',
+  'Running Monte Carlo simulations...',
+  'Calculating optimal club sequences...',
+  'Analyzing wind and elevation effects...',
+  'Computing scoring probabilities...',
+  'Mapping safe miss zones...',
+  'Weighing risk vs reward tradeoffs...',
+  'Factoring in your shot dispersion...',
+  'Identifying key scoring opportunities...',
+  'Stress-testing the strategy...',
+  'Dialing in carry distances...',
+  'Finding the smartest play...',
+  'Simulating your approach patterns...',
+  'Calibrating blow-up risk...',
+  'Locking in the final strategy...',
+];
+
+const GOLF_TIPS = [
+  'Aim for the fat side of the green.',
+  'Course management beats raw distance.',
+  'A bogey is better than a double.',
+  'Play the shot you\'ve practiced.',
+  'When in doubt, take more club.',
+  'Miss on the right side of trouble.',
+  'Par is always a good score.',
+  'Commit to every shot.',
+];
+
+function PlanGenerationLoader({ current, total }: { current: number; total: number }) {
+  const [tipIndex, setTipIndex] = useState(0);
+  const pct = total > 0 ? (current / total) * 100 : 0;
+  const phaseMsg = PHASE_MESSAGES[Math.min(current, PHASE_MESSAGES.length - 1)];
+
+  // Rotate tips every 4 seconds
+  useEffect(() => {
+    const id = setInterval(() => setTipIndex((i) => (i + 1) % GOLF_TIPS.length), 4000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center gap-4 py-8 px-4">
+      {/* Animated golf ball */}
+      <div className="relative h-10 w-10">
+        <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+        <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-forest text-white font-display text-sm font-bold">
+          {current}/{total}
+        </div>
+      </div>
+
+      {/* Phase message */}
+      <p
+        key={phaseMsg}
+        className="text-sm font-medium text-text-dark text-center animate-fadeUp"
+      >
+        {phaseMsg}
+      </p>
+
+      {/* Progress bar */}
+      <div className="w-full max-w-xs">
+        <div className="h-2.5 rounded-full bg-border overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-turf to-fairway transition-all duration-500 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="text-[10px] text-text-muted text-center mt-1.5">
+          Hole {current} of {total}
+        </p>
+      </div>
+
+      {/* Rotating tip */}
+      <p
+        key={tipIndex}
+        className="text-xs text-sage italic text-center animate-fadeUp"
+      >
+        "{GOLF_TIPS[tipIndex]}"
+      </p>
+    </div>
+  );
+}
+
 function copySummary(plan: GamePlan) {
   const lines = [
     `${plan.courseName} — ${plan.teeBox.charAt(0).toUpperCase() + plan.teeBox.slice(1)} Tees`,
@@ -237,19 +324,9 @@ export function GamePlanView({ gamePlan, progress, isGenerating, onGenerate, dis
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Progress bar */}
+      {/* Progress loader */}
       {isGenerating && progress && (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-xs text-text-muted text-center">
-            Optimizing hole {progress.current} of {progress.total}...
-          </p>
-          <div className="h-2 rounded-full bg-border overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-150"
-              style={{ width: `${(progress.current / progress.total) * 100}%` }}
-            />
-          </div>
-        </div>
+        <PlanGenerationLoader current={progress.current} total={progress.total} />
       )}
 
       {gamePlan && (
