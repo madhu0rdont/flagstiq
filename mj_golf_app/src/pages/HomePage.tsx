@@ -71,9 +71,6 @@ export function HomePage() {
       <div className="relative z-[1]">
         {/* Hero */}
         <section className="px-8 pt-8 pb-0">
-          <p className="animate-fadeUp delay-1 font-mono text-[0.65rem] tracking-[0.2em] uppercase text-sage mb-2.5">
-            Yardage Book · Season {new Date().getFullYear()}
-          </p>
           <h1 className="animate-fadeUp delay-2 font-display text-[clamp(2.8rem,6vw,5rem)] font-black leading-[0.95] text-forest mb-1.5">
             {firstName}'s<br /><em className="italic text-fairway">Game</em>
           </h1>
