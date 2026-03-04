@@ -114,7 +114,7 @@ export function LoginPage() {
       <div className="flex min-h-screen items-center justify-center bg-surface px-4">
         <div className="w-full max-w-sm">
           <div className="mb-6 text-center">
-            <h1 className="font-display text-3xl font-bold text-forest">MJ <span className="text-fairway">Golf</span></h1>
+            <h1 className="font-display text-3xl font-bold text-forest">Flagst<span className="text-fairway">IQ</span></h1>
             <p className="mt-1 font-mono text-xs tracking-wider text-sand uppercase">First-time setup</p>
           </div>
 
@@ -161,7 +161,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <h1 className="font-display text-3xl font-bold text-forest">MJ <span className="text-fairway">Golf</span></h1>
+          <h1 className="font-display text-3xl font-bold text-forest">Flagst<span className="text-fairway">IQ</span></h1>
         </div>
 
         <div className="rounded-[20px] bg-card p-6 shadow-[var(--shadow-card)]">
@@ -359,6 +359,8 @@ export function LoginPage() {
           )}
 
         </div>
+
+        <p className="mt-6 text-center text-xs text-text-muted">&copy; 2026 FlagstIQ - All rights reserved.</p>
       </div>
     </div>
   );
