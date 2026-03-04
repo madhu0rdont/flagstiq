@@ -15,6 +15,7 @@ export interface HolePlan {
   yardage: number;
   playsLikeYardage: number | null;
   strategy: OptimizedStrategy;
+  allStrategies: OptimizedStrategy[];   // all 3 modes [scoring, safe, aggressive]
   colorCode: 'green' | 'yellow' | 'red';
 }
 
@@ -103,6 +104,7 @@ export function generateGamePlan(
       yardage,
       playsLikeYardage,
       strategy,
+      allStrategies: allStrategies.get(hole.holeNumber) ?? [strategy],
       colorCode: colorCodeHole(strategy),
     });
   }

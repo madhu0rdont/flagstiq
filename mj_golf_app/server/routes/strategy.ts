@@ -29,7 +29,7 @@ router.post('/hole', async (req, res) => {
     }
     const hole = toCamel<CourseHole>(holeRows[0]);
 
-    // Build distributions from user's shot data
+    // Build distributions from user's shot data (deterministic — always computed fresh)
     const { rows: clubRows } = await query('SELECT * FROM clubs WHERE user_id = $1 ORDER BY sort_order', [userId]);
     const clubs = clubRows.map(toCamel<Club>);
 
@@ -43,7 +43,23 @@ router.post('/hole', async (req, res) => {
       return res.status(400).json({ error: 'No shot data to build distributions' });
     }
 
-    // Run DP optimizer
+    // Try to use cached strategies from game plan (ensures consistency with game plan view)
+    const { rows: cacheRows } = await query(
+      `SELECT plan FROM game_plan_cache WHERE course_id = $1 AND mode = 'scoring' AND user_id = $2 AND stale = FALSE`,
+      [courseId, userId],
+    );
+
+    if (cacheRows.length > 0) {
+      const cachedPlan = typeof cacheRows[0].plan === 'string'
+        ? JSON.parse(cacheRows[0].plan)
+        : cacheRows[0].plan;
+      const holePlan = cachedPlan?.holes?.find((h: { holeNumber: number }) => h.holeNumber === holeNumber);
+      if (holePlan?.allStrategies?.length > 0) {
+        return res.json({ strategies: holePlan.allStrategies, distributions });
+      }
+    }
+
+    // No cache or no allStrategies — compute fresh
     const roughPenalty = await getRoughPenalty();
     const strategies = dpOptimizeHole(hole, teeBox, distributions, roughPenalty);
 

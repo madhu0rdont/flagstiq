@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { fetcher } from '../lib/fetcher';
 import { api } from '../lib/api';
@@ -57,6 +57,15 @@ export function useGamePlanCache(
   staleRef.current = data?.stale ?? false;
   if (!data?.stale) pollCountRef.current = 0;
 
+  // Revalidate handicap when auto-regeneration completes (stale → fresh)
+  const prevStaleRef = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (prevStaleRef.current === true && data?.stale === false) {
+      globalMutate('/api/game-plans/handicap');
+    }
+    prevStaleRef.current = data?.stale;
+  }, [data?.stale]);
+
   const gamePlan = data?.plan ?? null;
   const isStale = data?.stale ?? false;
   const staleReason = data?.staleReason ?? null;
@@ -72,10 +81,11 @@ export function useGamePlanCache(
       // Generate plan on server (DP optimizer)
       await api.post(`/game-plans/${course.id}/${teeBox}/scoring/generate`, {});
 
-      // Revalidate SWR cache
+      // Revalidate SWR cache + handicap
       if (cacheKey) {
         await globalMutate(cacheKey);
       }
+      globalMutate('/api/game-plans/handicap');
     } finally {
       setIsGenerating(false);
       setProgress(null);
