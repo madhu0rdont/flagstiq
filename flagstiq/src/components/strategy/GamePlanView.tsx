@@ -333,19 +333,31 @@ export function GamePlanView({ gamePlan, progress, isGenerating, onGenerate, dis
         <>
           {/* Stale banner */}
           {isStale && (
-            <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
-              <RefreshCw size={16} className="text-amber-600 flex-shrink-0 animate-spin" />
-              <p className="text-xs text-amber-800 flex-1">
-                {staleReason ? (STALE_REASON_LABELS[staleReason] ?? `${staleReason} — auto-refreshing...`) : 'Auto-refreshing...'}
-              </p>
-              <button
-                onClick={onGenerate}
-                disabled={isGenerating}
-                className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-700 transition-colors disabled:opacity-50"
-              >
-                <RefreshCw size={12} />
-                Refresh Now
-              </button>
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <RefreshCw size={16} className="text-amber-600 flex-shrink-0 animate-spin" />
+                <p className="text-xs text-amber-800 flex-1">
+                  {isGenerating && progress
+                    ? `${PHASE_MESSAGES[Math.min(progress.current, PHASE_MESSAGES.length - 1)]} (hole ${progress.current} of ${progress.total})`
+                    : staleReason ? (STALE_REASON_LABELS[staleReason] ?? `${staleReason} — auto-refreshing...`) : 'Auto-refreshing...'}
+                </p>
+                <button
+                  onClick={onGenerate}
+                  disabled={isGenerating}
+                  className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-700 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={12} />
+                  Refresh Now
+                </button>
+              </div>
+              {isGenerating && progress && progress.total > 0 && (
+                <div className="mt-2 h-1.5 rounded-full bg-amber-200 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500 transition-all duration-500 ease-out"
+                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
