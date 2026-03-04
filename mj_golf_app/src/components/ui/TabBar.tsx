@@ -19,9 +19,9 @@ export function TabBar({ tabs, activeTab }: TabBarProps) {
           key={tab.key}
           to={tab.to}
           replace
-          className={`flex-1 py-2.5 text-center text-sm font-medium transition ${
+          className={`flex-1 py-2.5 text-center font-mono text-xs tracking-wide font-medium transition ${
             activeTab === tab.key
-              ? 'border-b-2 border-primary text-primary'
+              ? 'border-b-2 border-fairway text-forest'
               : 'text-text-muted hover:text-text-medium'
           }`}
         >

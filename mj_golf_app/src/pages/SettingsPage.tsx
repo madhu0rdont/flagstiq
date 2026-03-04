@@ -133,12 +133,12 @@ export function SettingsPage() {
       <div className="px-4 py-4">
         {/* Profile */}
         <section className="mb-6">
-          <h3 className="mb-3 text-sm font-medium text-text-medium uppercase">Profile</h3>
+          <h3 className="mb-3 font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Profile</h3>
           <div className="flex flex-col items-center gap-3 mb-4">
             <div className="relative">
               <button
                 onClick={() => pictureInputRef.current?.click()}
-                className="relative flex h-20 w-20 items-center justify-center rounded-full bg-primary text-xl font-bold text-white overflow-hidden ring-2 ring-border hover:ring-primary transition-all"
+                className="relative flex h-20 w-20 items-center justify-center rounded-full bg-forest font-mono text-xl font-medium tracking-wide text-white overflow-hidden ring-2 ring-border hover:ring-fairway transition-all"
               >
                 {currentPicture ? (
                   <img src={currentPicture} alt="Profile" className="h-full w-full object-cover" />
@@ -177,7 +177,7 @@ export function SettingsPage() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={user?.username}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
               />
             </div>
             <div>
@@ -187,7 +187,7 @@ export function SettingsPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Optional"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
               />
             </div>
           </div>
@@ -211,7 +211,7 @@ export function SettingsPage() {
 
         {/* Handedness */}
         <section className="mb-6">
-          <h3 className="mb-2 text-sm font-medium text-text-medium uppercase">Handedness</h3>
+          <h3 className="mb-2 font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Handedness</h3>
           <p className="mb-3 text-xs text-text-muted">
             Affects how draw/fade and hook/slice are classified from spin data.
           </p>
@@ -220,7 +220,7 @@ export function SettingsPage() {
               onClick={() => setHandedness('left')}
               className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 handedness === 'left'
-                  ? 'border-primary bg-primary-pale text-primary'
+                  ? 'border-turf bg-parchment text-turf'
                   : 'border-border bg-card text-text-muted'
               }`}
             >
@@ -230,7 +230,7 @@ export function SettingsPage() {
               onClick={() => setHandedness('right')}
               className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 handedness === 'right'
-                  ? 'border-primary bg-primary-pale text-primary'
+                  ? 'border-turf bg-parchment text-turf'
                   : 'border-border bg-card text-text-muted'
               }`}
             >
@@ -241,7 +241,7 @@ export function SettingsPage() {
 
         {/* Data Management */}
         <section className="mb-6">
-          <h3 className="mb-2 text-sm font-medium text-text-medium uppercase">Data Management</h3>
+          <h3 className="mb-2 font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Data Management</h3>
           <div className="flex flex-col gap-2">
             <Button variant="secondary" onClick={handleExport} className="w-full justify-start">
               <Download size={16} /> Export All Data (JSON)

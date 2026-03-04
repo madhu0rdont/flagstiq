@@ -1,7 +1,7 @@
 import type { DataFreshness } from '../../models/yardage';
 
 const FRESHNESS_CONFIG: Record<DataFreshness, { dot: string; label: string; text: string }> = {
-  fresh: { dot: 'bg-primary', label: 'Fresh', text: 'text-primary' },
+  fresh: { dot: 'bg-fairway', label: 'Fresh', text: 'text-fairway' },
   aging: { dot: 'bg-amber-500', label: 'Aging', text: 'text-amber-600' },
   stale: { dot: 'bg-coral', label: 'Stale', text: 'text-coral' },
 };
@@ -11,7 +11,7 @@ export function FreshnessBadge({ freshness }: { freshness: DataFreshness }) {
   return (
     <div className="flex items-center gap-1">
       <div className={`h-2 w-2 rounded-full ${config.dot}`} />
-      <span className={`text-[10px] font-medium ${config.text}`}>{config.label}</span>
+      <span className={`rounded-[6px] text-[10px] font-medium ${config.text}`}>{config.label}</span>
     </div>
   );
 }

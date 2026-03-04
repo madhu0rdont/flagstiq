@@ -37,7 +37,7 @@ export function YardageBookPage() {
               const view = VIEWS.find((v) => v.key === e.target.value);
               if (view) navigate(view.to, { replace: true });
             }}
-            className="w-full appearance-none rounded-xl border border-border bg-card px-4 py-2.5 pr-10 text-sm font-medium text-text-dark focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full appearance-none rounded-xl border border-border bg-card px-4 py-2.5 pr-10 text-sm font-medium text-text-dark focus:border-fairway focus:outline-none focus:ring-1 focus:ring-fairway"
           >
             {VIEWS.map((v) => (
               <option key={v.key} value={v.key}>

@@ -52,16 +52,16 @@ function AdminCourseCard({ course }: { course: Course }) {
   return (
     <button
       onClick={() => navigate(`/admin/${course.id}`)}
-      className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card p-4 text-center hover:border-primary hover:shadow-sm transition-all"
+      className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-4 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
     >
       {logoUrl ? (
         <img src={logoUrl} alt={course.name} className="h-12 w-12 object-contain" />
       ) : (
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-          <MapPin size={20} className="text-primary" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-turf/10">
+          <MapPin size={20} className="text-turf" />
         </div>
       )}
-      <p className="text-sm font-semibold text-text-dark leading-tight">{course.name}</p>
+      <p className="font-display text-sm font-bold text-text-dark leading-tight">{course.name}</p>
       {details.length > 0 && (
         <p className="text-[10px] text-text-muted">{details.join(' · ')}</p>
       )}
@@ -155,12 +155,12 @@ export function AdminPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 onClick={() => navigate('/admin/courses')}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card p-5 text-center hover:border-primary hover:shadow-sm transition-all"
+                className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-5 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-turf/10">
                   <Map size={20} className="text-primary" />
                 </div>
-                <p className="text-sm font-semibold text-text-dark">Courses</p>
+                <p className="font-display text-sm font-bold text-text-dark">Courses</p>
                 <p className="text-xs text-text-muted">Edit scorecards, hazards & holes</p>
                 {courses && courses.length > 0 && (
                   <p className="text-[10px] text-text-faint">{courses.length} course{courses.length !== 1 ? 's' : ''}</p>
@@ -169,34 +169,34 @@ export function AdminPage() {
 
               <button
                 onClick={() => navigate('/admin/penalties')}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card p-5 text-center hover:border-primary hover:shadow-sm transition-all"
+                className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-5 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-turf/10">
                   <Shield size={20} className="text-primary" />
                 </div>
-                <p className="text-sm font-semibold text-text-dark">Penalties</p>
+                <p className="font-display text-sm font-bold text-text-dark">Penalties</p>
                 <p className="text-xs text-text-muted">Configure hazard penalty values</p>
               </button>
 
               <button
                 onClick={() => navigate('/admin/import')}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card p-5 text-center hover:border-primary hover:shadow-sm transition-all"
+                className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-5 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-turf/10">
                   <Upload size={20} className="text-primary" />
                 </div>
-                <p className="text-sm font-semibold text-text-dark">Import Course</p>
+                <p className="font-display text-sm font-bold text-text-dark">Import Course</p>
                 <p className="text-xs text-text-muted">Import a new course from KML</p>
               </button>
 
               <button
                 onClick={() => navigate('/admin/users')}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card p-5 text-center hover:border-primary hover:shadow-sm transition-all"
+                className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-5 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-turf/10">
                   <Users size={20} className="text-primary" />
                 </div>
-                <p className="text-sm font-semibold text-text-dark">Users</p>
+                <p className="font-display text-sm font-bold text-text-dark">Users</p>
                 <p className="text-xs text-text-muted">Manage user accounts & roles</p>
               </button>
             </div>

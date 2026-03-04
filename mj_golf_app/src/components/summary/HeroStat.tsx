@@ -20,12 +20,12 @@ export function HeroStat({ label, value, unit, delta, accent, compact }: HeroSta
   const valueColor = accent ? ACCENT_COLORS[accent] : 'text-text-dark';
 
   return (
-    <div className={`flex-1 rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] ${compact ? 'p-3' : 'p-4'}`}>
-      <div className={`font-medium uppercase tracking-wider text-text-muted ${compact ? 'text-[9px]' : 'text-[10px]'}`}>
+    <div className={`flex-1 rounded-[20px] border border-border bg-card shadow-[var(--shadow-card)] ${compact ? 'p-3' : 'p-4'}`}>
+      <div className={`font-mono uppercase tracking-[0.2em] text-sand ${compact ? 'text-[9px]' : 'text-[0.6rem]'}`}>
         {label}
       </div>
       <div className="mt-1 flex items-baseline gap-1">
-        <span className={`font-bold font-mono ${valueColor} ${compact ? 'text-2xl' : 'text-3xl'}`}>{value}</span>
+        <span className={`font-bold font-display ${valueColor} ${compact ? 'text-2xl' : 'text-3xl'}`}>{value}</span>
         {unit && <span className={`text-text-muted ${compact ? 'text-xs' : 'text-sm'}`}>{unit}</span>}
       </div>
       {delta && delta.direction !== 'neutral' && (

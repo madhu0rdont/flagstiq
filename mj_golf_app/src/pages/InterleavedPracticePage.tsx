@@ -313,7 +313,7 @@ export function InterleavedPracticePage() {
             </div>
           </div>
 
-          <h3 className="text-sm font-medium text-text-muted mb-3">Round Size</h3>
+          <h3 className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand mb-3">Round Size</h3>
           <div className="grid grid-cols-2 gap-3 mb-6">
             {([9, 18] as const).map((n) => (
               <button
@@ -393,10 +393,10 @@ export function InterleavedPracticePage() {
         {currentHole && (
           <div className="rounded-2xl border border-border bg-card p-4 mb-4">
             <div className="text-center mb-4">
-              <p className="text-xs text-text-muted uppercase tracking-wide">
+              <p className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">
                 Hole {currentHole.number} of {holes.length}
               </p>
-              <p className="text-2xl font-bold text-text-dark mt-1">
+              <p className="font-display text-2xl font-bold text-forest mt-1">
                 Par {currentHole.par} — {currentHole.distanceYards} yds
               </p>
             </div>

@@ -22,7 +22,7 @@ export function ClubCard({ club, dragHandleProps }: ClubCardProps) {
 
   return (
     <div
-      className="flex items-center gap-3 rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] px-3 py-3 transition-all duration-200 hover:-translate-y-px hover:shadow-[var(--shadow-card-hover)]"
+      className="flex items-center gap-3 bg-white border border-parchment rounded-[12px] px-3 py-3 transition-colors hover:border-sage"
       onClick={() => navigate(`/bag/${club.id}/edit`)}
     >
       {dragHandleProps && (
@@ -34,7 +34,7 @@ export function ClubCard({ club, dragHandleProps }: ClubCardProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-text-dark">{club.name}</span>
-          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase ${CATEGORY_COLORS[club.category] || 'bg-gray-100 text-text-medium'}`}>
+          <span className={`rounded-[6px] px-1.5 py-0.5 text-[10px] font-medium uppercase ${CATEGORY_COLORS[club.category] || 'bg-gray-100 text-text-medium'}`}>
             {club.category}
           </span>
         </div>
@@ -47,7 +47,7 @@ export function ClubCard({ club, dragHandleProps }: ClubCardProps) {
       <div className="flex items-center gap-3">
         {carry != null && (
           <div className="text-right">
-            <div className="text-sm font-semibold text-text-dark">{carry}</div>
+            <div className="font-display text-lg font-bold text-gold">{carry}</div>
             <div className="text-[10px] text-text-muted">yds</div>
           </div>
         )}

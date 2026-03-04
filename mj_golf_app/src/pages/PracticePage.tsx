@@ -23,18 +23,18 @@ export function PracticePage() {
       <div className="px-4 py-6">
         {/* Practice Actions */}
         <div className="mb-6">
-          <h3 className="mb-2 text-xs font-medium text-text-muted uppercase tracking-wide">Practice</h3>
+          <h3 className="mb-2 font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Practice</h3>
           <div className="grid grid-cols-2 gap-2">
             <Link
               to="/session/new"
-              className="flex flex-col items-center gap-1.5 rounded-xl bg-primary p-3 text-center text-sm font-medium text-white transition-colors hover:bg-primary-light"
+              className="shimmer-hover flex flex-col items-center gap-1.5 rounded-[20px] bg-forest p-3 text-center text-sm font-medium text-white transition-all hover:-translate-y-1 hover:shadow-[var(--shadow-card-hover)]"
             >
               <Plus size={20} />
               <span>Start Practice</span>
             </Link>
             <Link
               to="/sessions"
-              className="flex flex-col items-center gap-1.5 rounded-xl bg-card border border-border shadow-sm p-3 text-center text-sm font-medium transition-all duration-200 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-px"
+              className="shimmer-hover flex flex-col items-center gap-1.5 rounded-[20px] bg-parchment border border-sand p-3 text-center text-sm font-medium text-forest transition-all duration-200 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1"
             >
               <ClipboardList size={20} />
               <span>Sessions</span>
@@ -58,17 +58,17 @@ export function PracticePage() {
         {/* Quick Stats */}
         {yardageBook && yardageBook.length > 0 && (
           <div className="mb-6 grid grid-cols-3 gap-2">
-            <div className="rounded-2xl border border-border bg-card shadow-sm p-3 text-center">
-              <div className="text-xl font-bold text-text-dark">{clubs?.length ?? 0}</div>
-              <div className="text-[10px] text-text-muted uppercase">Clubs</div>
+            <div className="rounded-[20px] border border-border bg-card shadow-[var(--shadow-card)] p-3 text-center">
+              <div className="font-display text-xl font-bold text-gold">{clubs?.length ?? 0}</div>
+              <div className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Clubs</div>
             </div>
-            <div className="rounded-2xl border border-border bg-card shadow-sm p-3 text-center">
-              <div className="text-xl font-bold text-text-dark">{yardageBook.length}</div>
-              <div className="text-[10px] text-text-muted uppercase">With Data</div>
+            <div className="rounded-[20px] border border-border bg-card shadow-[var(--shadow-card)] p-3 text-center">
+              <div className="font-display text-xl font-bold text-gold">{yardageBook.length}</div>
+              <div className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">With Data</div>
             </div>
-            <div className="rounded-2xl border border-border bg-card shadow-sm p-3 text-center">
-              <div className="text-xl font-bold text-text-dark">{totalSessions}</div>
-              <div className="text-[10px] text-text-muted uppercase">Sessions</div>
+            <div className="rounded-[20px] border border-border bg-card shadow-[var(--shadow-card)] p-3 text-center">
+              <div className="font-display text-xl font-bold text-gold">{totalSessions}</div>
+              <div className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Sessions</div>
             </div>
           </div>
         )}
@@ -76,7 +76,7 @@ export function PracticePage() {
         {/* Recent Sessions */}
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-text-medium uppercase">Recent Sessions</h3>
+            <h3 className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Recent Sessions</h3>
             {recentSessions && recentSessions.length > 0 && (
               <Link to="/sessions" className="text-xs font-medium text-primary">
                 View All
@@ -93,7 +93,7 @@ export function PracticePage() {
                 <button
                   key={session.id}
                   onClick={() => navigate(`/session/${session.id}`)}
-                  className="flex items-center justify-between rounded-2xl border border-border bg-card shadow-sm p-3 text-left transition-all duration-200 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-px"
+                  className="flex items-center justify-between bg-white border border-parchment rounded-[12px] p-3 text-left transition-colors hover:border-sage"
                 >
                   <div>
                     <div className="text-sm font-medium text-text-dark">

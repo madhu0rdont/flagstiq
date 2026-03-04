@@ -51,11 +51,11 @@ export function LoginPage() {
       <div className="flex min-h-screen items-center justify-center bg-surface px-4">
         <div className="w-full max-w-sm">
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-primary">MJ Golf</h1>
-            <p className="mt-1 text-sm text-text-muted">First-time setup</p>
+            <h1 className="font-display text-3xl font-bold text-forest">MJ <span className="text-fairway">Golf</span></h1>
+            <p className="mt-1 font-mono text-xs tracking-wider text-sand uppercase">First-time setup</p>
           </div>
 
-          <form onSubmit={handleSetup} className="rounded-xl bg-card p-6 shadow-sm space-y-4">
+          <form onSubmit={handleSetup} className="rounded-[20px] bg-card p-6 shadow-[var(--shadow-card)] space-y-4">
             <p className="text-xs text-text-muted">Create an admin account (for managing courses and users) and your player account.</p>
 
             <div>
@@ -65,7 +65,7 @@ export function LoginPage() {
                 autoComplete="off"
                 value={adminUsername}
                 onChange={(e) => setAdminUsername(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
                 placeholder="admin"
               />
             </div>
@@ -76,7 +76,7 @@ export function LoginPage() {
                 autoComplete="new-password"
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
               />
             </div>
 
@@ -89,7 +89,7 @@ export function LoginPage() {
                 autoComplete="off"
                 value={playerUsername}
                 onChange={(e) => setPlayerUsername(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
               />
             </div>
             <div>
@@ -99,7 +99,7 @@ export function LoginPage() {
                 autoComplete="new-password"
                 value={playerPassword}
                 onChange={(e) => setPlayerPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
               />
             </div>
             <div>
@@ -109,7 +109,7 @@ export function LoginPage() {
                 autoComplete="off"
                 value={playerDisplayName}
                 onChange={(e) => setPlayerDisplayName(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
                 placeholder="MJ"
               />
             </div>
@@ -133,11 +133,11 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-primary">MJ Golf</h1>
-          <p className="mt-1 text-sm text-text-muted">Club Distances & Yardage Book</p>
+          <h1 className="font-display text-3xl font-bold text-forest">MJ <span className="text-fairway">Golf</span></h1>
+          <p className="mt-1 font-mono text-xs tracking-wider text-sand uppercase">Club Distances & Yardage Book</p>
         </div>
 
-        <form onSubmit={handleLogin} className="rounded-xl bg-card p-6 shadow-sm">
+        <form onSubmit={handleLogin} className="rounded-[20px] bg-card p-6 shadow-[var(--shadow-card)]">
           <label htmlFor="username" className="mb-2 block text-sm font-medium text-text-medium">
             Username
           </label>
@@ -147,7 +147,7 @@ export function LoginPage() {
             autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="mb-4 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            className="mb-4 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
             placeholder="Username"
             autoFocus
           />
@@ -161,7 +161,7 @@ export function LoginPage() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mb-4 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text-dark outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            className="mb-4 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text-dark outline-none focus:border-fairway focus:ring-1 focus:ring-fairway"
             placeholder="Password"
           />
 

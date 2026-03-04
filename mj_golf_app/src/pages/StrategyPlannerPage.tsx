@@ -51,16 +51,16 @@ function CourseCard({ course, onSelect }: { course: Course; onSelect: (id: strin
   return (
     <button
       onClick={() => onSelect(course.id)}
-      className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card p-4 text-center hover:border-primary hover:shadow-sm transition-all"
+      className="shimmer-hover flex flex-col items-center gap-2 rounded-[20px] border border-border bg-card p-4 text-center hover:border-fairway hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all"
     >
       {logoUrl ? (
         <img src={logoUrl} alt={course.name} className="h-12 w-12 object-contain" />
       ) : (
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-          <MapPin size={20} className="text-primary" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-turf/10">
+          <MapPin size={20} className="text-turf" />
         </div>
       )}
-      <p className="text-sm font-semibold text-text-dark leading-tight">{course.name}</p>
+      <p className="font-display text-sm font-bold text-text-dark leading-tight">{course.name}</p>
       {details.length > 0 && (
         <p className="text-[10px] text-text-muted">{details.join(' · ')}</p>
       )}
@@ -191,9 +191,9 @@ export function StrategyPlannerPage() {
             <button
               key={t.key}
               onClick={() => setTeeBox(t.key)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-[6px] px-3 py-1 text-xs font-medium transition-colors ${
                 teeBox === t.key
-                  ? 'bg-primary text-white'
+                  ? 'bg-turf text-white'
                   : 'bg-surface text-text-medium hover:bg-border'
               }`}
             >

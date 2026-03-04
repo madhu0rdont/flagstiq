@@ -12,7 +12,7 @@ export function Toggle({ checked, onChange, label, description, className = '' }
       <button
         onClick={() => onChange(!checked)}
         className={`relative h-5 w-9 rounded-full transition-colors ${
-          checked ? 'bg-primary' : 'bg-border'
+          checked ? 'bg-turf' : 'bg-border'
         }`}
         role="switch"
         aria-checked={checked}

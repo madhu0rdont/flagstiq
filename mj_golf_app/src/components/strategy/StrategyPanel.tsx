@@ -15,11 +15,11 @@ function isOptimized(s: ApproachStrategy): s is OptimizedStrategy {
 }
 
 const SCORE_COLORS: { key: keyof ScoreDistribution; color: string }[] = [
-  { key: 'eagle', color: '#D4A843' },
-  { key: 'birdie', color: '#40916C' },
-  { key: 'par', color: '#2D6A4F' },
-  { key: 'bogey', color: '#9B9B9B' },
-  { key: 'double', color: '#E76F51' },
+  { key: 'eagle', color: '#c9a84c' },
+  { key: 'birdie', color: '#3d7a35' },
+  { key: 'par', color: '#2d5a27' },
+  { key: 'bogey', color: '#c8b99a' },
+  { key: 'double', color: '#c0392b' },
   { key: 'worse', color: '#DC2626' },
 ];
 
@@ -86,7 +86,7 @@ export function StrategyPanel({ strategies, selectedIdx, onSelect, shotCount, is
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-2">
-      <h3 className="text-sm font-semibold text-text-dark">Approach Strategies</h3>
+      <h3 className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand">Approach Strategies</h3>
 
       {strategies.map((s, idx) => {
         const isSelected = idx === selectedIdx;

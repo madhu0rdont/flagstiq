@@ -52,11 +52,11 @@ function P({ children, className = '' }: { children: string; className?: string 
 }
 
 function H3({ children }: { children: string }) {
-  return <h3 className="text-sm font-medium text-text-medium uppercase mb-3">{children}</h3>;
+  return <h3 className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-sand mb-3">{children}</h3>;
 }
 
 function H4({ children }: { children: string }) {
-  return <h4 className="text-sm font-semibold text-text-dark mt-5 mb-2">{children}</h4>;
+  return <h4 className="font-display text-sm font-bold text-text-dark mt-5 mb-2">{children}</h4>;
 }
 
 function Card({ children, id }: { children: ReactNode; id?: string }) {
@@ -70,16 +70,16 @@ function DiagramCaption({ children }: { children: string }) {
 /* ── SVG Diagrams ── */
 
 const C = {
-  primary: '#2D6A4F',
-  primaryLight: '#40916C',
-  gold: '#D4A843',
-  coral: '#E76F51',
+  primary: '#2d5a27',
+  primaryLight: '#3d7a35',
+  gold: '#c9a84c',
+  coral: '#c0392b',
   blue: '#4361EE',
   purple: '#7209B7',
   orange: '#F4A261',
-  muted: '#9B9B9B',
-  faint: '#C5C5C5',
-  bg: '#F3F0EB',
+  muted: '#c8b99a',
+  faint: '#d4c9b0',
+  bg: '#f4f0e8',
   card: '#FFFFFF',
 };
 

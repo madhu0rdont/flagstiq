@@ -179,7 +179,7 @@ export function SessionSummaryPage() {
         {/* Header */}
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-xl font-bold">{club.name}</h2>
+            <h2 className="font-display text-2xl font-bold text-forest">{club.name}</h2>
             <p className="text-sm text-text-medium">
               {dateStr} &middot; {summary.shotCount} shots
               {session.location && ` at ${session.location}`}

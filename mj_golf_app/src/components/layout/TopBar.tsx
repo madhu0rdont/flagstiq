@@ -64,13 +64,13 @@ export function TopBar({ title, showBack, rightAction }: TopBarProps) {
             </button>
           ) : null}
         </div>
-        <h1 className="flex-1 text-center text-lg font-semibold text-text-dark">{title}</h1>
+        <h1 className="flex-1 text-center font-display text-lg font-bold tracking-wide text-text-dark">{title}</h1>
         <div className="flex items-center gap-1 justify-end">
           {rightAction}
           <div className="relative" ref={avatarRef}>
             <button
               onClick={() => setAvatarOpen(!avatarOpen)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-white overflow-hidden"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-forest font-mono text-xs font-medium tracking-wide text-white overflow-hidden"
               aria-label="User menu"
             >
               {user?.profilePicture ? (
@@ -85,7 +85,7 @@ export function TopBar({ title, showBack, rightAction }: TopBarProps) {
                   {user?.profilePicture ? (
                     <img src={user.profilePicture} alt="" className="h-9 w-9 rounded-full object-cover flex-shrink-0" />
                   ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white flex-shrink-0">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-forest font-mono text-xs font-medium tracking-wide text-white flex-shrink-0">
                       {initials}
                     </div>
                   )}
@@ -126,7 +126,7 @@ export function TopBar({ title, showBack, rightAction }: TopBarProps) {
           />
           <nav className="relative z-10 flex w-64 flex-col bg-card shadow-lg">
             <div className="flex h-14 items-center justify-between border-b border-border px-4">
-              <span className="text-lg font-semibold text-text-dark">MJ Golf</span>
+              <span className="font-display text-lg font-bold tracking-wider text-forest">MJ <span className="text-fairway">Golf</span></span>
               <button
                 onClick={() => setMenuOpen(false)}
                 className="rounded-lg p-1.5 text-text-muted hover:text-text-dark"
@@ -145,7 +145,7 @@ export function TopBar({ title, showBack, rightAction }: TopBarProps) {
                     onClick={() => setMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
                       isActive
-                        ? 'bg-primary-pale text-primary font-semibold'
+                        ? 'bg-primary-pale text-turf font-semibold'
                         : 'text-text-medium hover:bg-surface'
                     }`}
                   >
@@ -164,7 +164,7 @@ export function TopBar({ title, showBack, rightAction }: TopBarProps) {
                     onClick={() => setMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
                       isActive
-                        ? 'bg-primary-pale text-primary font-semibold'
+                        ? 'bg-primary-pale text-turf font-semibold'
                         : 'text-text-medium hover:bg-surface'
                     }`}
                   >

@@ -36,7 +36,7 @@ export function HoleSelector({ totalHoles, current, onChange, keyHoles }: HoleSe
             {keyHoles?.has(n) && (
               <span
                 className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: n === current ? 'white' : '#D4A843' }}
+                style={{ backgroundColor: n === current ? 'white' : '#c9a84c' }}
               />
             )}
           </button>

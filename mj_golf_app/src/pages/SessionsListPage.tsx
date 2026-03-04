@@ -64,7 +64,7 @@ export function SessionsListPage() {
               <button
                 key={session.id}
                 onClick={() => navigate(`/session/${session.id}`)}
-                className="flex items-center justify-between rounded-2xl border border-border bg-card shadow-sm p-3 text-left transition-all duration-200 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-px"
+                className="flex items-center justify-between bg-white border border-parchment rounded-[12px] p-3 text-left transition-colors hover:border-sage"
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-text-dark">

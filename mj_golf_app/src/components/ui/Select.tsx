@@ -16,7 +16,7 @@ export function Select({ label, options, className = '', id, ...props }: SelectP
       )}
       <select
         id={selectId}
-        className={`w-full rounded-lg border border-border bg-card px-3 py-2 text-text-dark focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${className}`}
+        className={`w-full rounded-lg border border-border bg-card px-3 py-2 text-text-dark focus:border-fairway focus:outline-none focus:ring-1 focus:ring-fairway ${className}`}
         {...props}
       >
         {options.map((opt) => (
