@@ -297,13 +297,38 @@ function renderHoleMapCanvas(hole: CourseHole, aimPoints: AimPoint[]): string {
   const SKIP_TYPES = new Set(['ob', 'rough']);
   for (const h of hole.hazards) {
     if (h.polygon.length < 3 || SKIP_TYPES.has(h.type)) continue;
-    const color = HAZARD_COLORS[h.type] ?? '#FFFFFF';
-    const r = parseInt(color.slice(1, 3), 16);
-    const g = parseInt(color.slice(3, 5), 16);
-    const b = parseInt(color.slice(5, 7), 16);
 
-    {
-      // HoleViewer: fillOpacity 0.3, strokeWeight 2
+    if (h.type === 'trees') {
+      // Trees: dark green fill with gray diagonal hatching (not a hitting area)
+      drawCanvasPolygon(ctx, h.polygon, proj, 'rgba(20,60,20,0.45)', 'rgba(40,80,40,0.50)', 1);
+
+      // Clip to tree polygon, then draw diagonal hatch lines
+      ctx.save();
+      ctx.beginPath();
+      const first = proj.project(h.polygon[0]);
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < h.polygon.length; i++) {
+        const p = proj.project(h.polygon[i]);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.clip();
+
+      ctx.strokeStyle = 'rgba(160,160,160,0.35)';
+      ctx.lineWidth = 1;
+      const SPACING = 6;
+      for (let d = -MAP_PX; d < MAP_PX * 2; d += SPACING) {
+        ctx.beginPath();
+        ctx.moveTo(d, 0);
+        ctx.lineTo(d + MAP_PX, MAP_PX);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else {
+      const color = HAZARD_COLORS[h.type] ?? '#FFFFFF';
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
       drawCanvasPolygon(
         ctx,
         h.polygon,
