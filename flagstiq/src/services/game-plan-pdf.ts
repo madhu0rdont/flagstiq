@@ -291,8 +291,8 @@ function renderHoleMapCanvas(hole: CourseHole, aimPoints: AimPoint[]): string {
     drawCanvasPolygon(ctx, hole.green, proj, 'rgba(0,200,83,0.30)', 'rgba(0,200,83,0.60)', 1);
   }
 
-  // 5. Hazards — bunkers and water only (skip OB, trees, rough for legibility)
-  const SKIP_TYPES = new Set(['ob', 'trees', 'rough']);
+  // 5. Hazards — draw bunkers, water, and trees (skip OB and rough for legibility)
+  const SKIP_TYPES = new Set(['ob', 'rough']);
   for (const h of hole.hazards) {
     if (h.polygon.length < 3 || SKIP_TYPES.has(h.type)) continue;
     const color = HAZARD_COLORS[h.type] ?? '#FFFFFF';

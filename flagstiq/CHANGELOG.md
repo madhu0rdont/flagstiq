@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.7.2 — PDF Tactical Maps & Optimizer Performance
+
+### PDF Game Plan Maps
+- Tactical yardage-book style hole maps embedded in PDF alongside strategy text
+- Canvas-rendered schematics: fairway, green, bunkers, shot paths, aim points
+- Tee at 6 o'clock, pin at 12 o'clock orientation
+- Smart cropping to fairway corridor — OB/rough excluded from bounds; trees visible but cropped naturally
+- PDF design system aligned with website theme (forest/turf/sage palette, white cards on linen)
+
+### DP Optimizer Performance
+- Parallel game plan generation across multiple worker threads (up to 4)
+- Adaptive bearing fan: 4° for <180y, 3° for 180–350y, 2° for 350y+ (fewer wasted samples on short holes)
+- Adaptive Monte Carlo sampling: 100 samples (safe zones), 250 (bunkers), 350 (OB/water)
+- Distributions computed once on main thread, shared across workers
+
+## v1.7.1 — Beta Hardening
+- Rate-limit `/reset-password` (5 req/15min)
+- Graceful shutdown handlers (SIGTERM/SIGINT) for Railway
+- Admin notification email on new user registration
+- Handedness picker on setup form
+- Loading state on admin user delete
+- CTA button in empty sessions state
+- Removed forced page reload after data import
+
+## v1.7.0 — FlagstIQ Rebrand & Contextual Help
+- Renamed from MJ Golf to FlagstIQ across UI, branding, and deployment
+- Contextual help sheets per page (replaces single How It Works page)
+- Phase-aware progress in stale plan banner during auto-regeneration
+- Copyright footer on settings and login pages
+
+## v1.6.0 — Strategy Consistency & Auto-Regeneration
+- Game plan cache with stale detection and auto-regeneration
+- Strategy sync versioning to trigger regen after optimizer changes
+- Hole viewer strategies match game plan selections
+- Handicap auto-refresh when plans update
+- Game plan history tracking with trigger reasons
+
 ## v1.5.0 — DP/MDP Strategy Optimizer
 - Dynamic Programming (Markov Decision Process) replaces hardcoded strategy templates
 - Zone discretization: walks hole centerline in 20y intervals with 3 lateral positions (~50 zones/hole)
