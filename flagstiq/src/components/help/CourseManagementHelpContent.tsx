@@ -33,7 +33,7 @@ Shots landing outside all fairway, green, and hazard polygons are treated as rou
 
 The key advantage: the optimizer discovers strategies on its own. It doesn't need to be told "hit driver, then 7-iron." It figures out that a 3-wood off the tee followed by a gap wedge scores better than driver-plus-9-iron because the 3-wood avoids the fairway bunker at 260 yards. It also produces conditional strategies — if your tee shot ends up in the rough right instead of the fairway, it already knows the best play from there.
 
-All computation runs server-side (~5–8 seconds per hole, ~120 seconds for 18 holes). The client fetches results via API.`}</P>
+All computation runs server-side, parallelized across multiple worker threads (~2–5 seconds per hole, ~30–60 seconds for 18 holes). The client fetches results via API.`}</P>
 
       <H4>Step 1: Zone discretization</H4>
       <P>{String.raw`The optimizer breaks each hole into a grid of discrete zones. Starting from the tee, it walks along the hole's center line in 20-yard intervals. At each interval, it creates 3 lateral positions: center (on the center line), left (20 yards left), and right (20 yards right). Each zone records its GPS position, its distance to the pin, and its lie — fairway or rough — determined by checking whether the position falls inside any fairway polygon.
@@ -51,14 +51,14 @@ For doglegs without explicit center line data, the optimizer synthesizes one by 
 
 Eligible clubs are those whose mean carry falls between 50% and 110% of the remaining distance to the pin. This keeps the search space practical — you wouldn't hit driver from 80 yards, and you wouldn't hit a wedge from 280. Typically 5–7 clubs qualify per zone.
 
-Aim bearings are sampled at 2° increments across $\pm$30° from the center line bearing at each zone — 31 bearings total. Using the center line direction instead of the pin bearing naturally aims tee shots down the fairway on doglegs. The fine 2° resolution lets the optimizer find narrow fairway windows (e.g., a 9°-wide fairway at 230 yards) that coarser steps would miss entirely.
+Aim bearings are sampled across $\pm$30° from the center line bearing at each zone, with an adaptive step size based on hole distance: 4° for short holes (<180y, 16 bearings), 3° for mid-length holes (180–350y, 21 bearings), and 2° for long holes (350y+, 31 bearings). Using the center line direction instead of the pin bearing naturally aims tee shots down the fairway on doglegs. The fine resolution on longer holes lets the optimizer find narrow fairway windows (e.g., a 9°-wide fairway at 230 yards) that coarser steps would miss.
 
 $$\text{actions}(z) = \{(c, \theta) : c \in \text{eligible}(z),\; \theta \in \{\theta_\text{centerline} - 30°, \ldots, \theta_\text{centerline} + 30°\}\}$$
 
-Total: ~150–220 actions per zone, explored exhaustively.`}</P>
+Total: ~100–220 actions per zone depending on hole length, explored exhaustively.`}</P>
 
       <H4>Step 3: Transition sampling</H4>
-      <P>{String.raw`For each (zone, club, bearing) triple, the optimizer simulates 200 Gaussian shots to build a probability distribution over where the ball will end up.
+      <P>{String.raw`For each (zone, club, bearing) triple, the optimizer simulates a batch of Gaussian shots to build a probability distribution over where the ball will end up. The sample count adapts to hazard density: 100 samples for safe zones with no nearby hazards, 250 for zones near bunkers, and 350 for zones near OB or water where accuracy matters most.
 
 Each sample draws carry and offline from your measured club distributions:
 
@@ -67,13 +67,13 @@ $$\text{offline} \sim \mathcal{N}(\mu_\text{offline},\; \sigma_\text{offline} \c
 
 where $\lambda$ is a lie multiplier: $\lambda = 1.0$ from the fairway, $\lambda = 1.15$ from the rough (15% wider dispersion due to uncertain contact).
 
-Each sample is projected to a GPS landing point, checked for tree trajectory collisions (3D flight model vs. canopy polygons), checked for hazard polygon hits (with stroke penalties), and then mapped to the nearest zone. After all 200 samples, the result is a transition probability table:
+Each sample is projected to a GPS landing point, checked for tree trajectory collisions (3D flight model vs. canopy polygons), checked for hazard polygon hits (with stroke penalties), and then mapped to the nearest zone. After all samples, the result is a transition probability table:
 
-$$P(z' \mid z, a) = \frac{\text{count of samples landing in zone } z'}{200}$$
+$$P(z' \mid z, a) = \frac{\text{count of samples landing in zone } z'}{N_\text{samples}}$$
 
 Along with the expected penalty $\mathbb{E}[\text{penalty} \mid z, a]$, penalty variance $\text{Var}[\text{penalty} \mid z, a]$, the probability of reaching the green $P(\text{green} \mid z, a)$, and the probability of landing on the fairway $P(\text{fairway} \mid z, a)$ — used by the lie cascade correction in value iteration.
 
-This transition table is the most expensive step (~1.8M samples per hole with 31 bearings) but is built once and shared across all 3 scoring modes.`}</P>
+This transition table is the most expensive step but is built once and shared across all 3 scoring modes. Adaptive bearing and sampling reduce total samples by ~40% on typical courses while concentrating accuracy near hazards.`}</P>
 
       <H4>Step 4: Value iteration (Bellman equation)</H4>
       <P>{String.raw`With the transition table built, the optimizer solves for the optimal value (expected strokes to finish) at every zone using the Bellman equation. It does this 3 times with different objective functions, producing 3 strategies per hole:
@@ -203,7 +203,7 @@ $$\text{delta}_h = |xS_\text{scoring} - xS_\text{safe}|$$
 The top 4 holes by delta are flagged with a gold KEY badge — these are the holes where playing it safe vs. aggressive costs (or saves) the most strokes. Game plans are cached on the server and auto-regenerate when your practice data changes (new sessions, updated clubs) or when the optimizer code is updated.`}</P>
 
       <H4>Three scoring modes</H4>
-      <P>{String.raw`All three modes share the same transition table (the expensive 800K-sample computation) and differ only in their objective function during value iteration:
+      <P>{String.raw`All three modes share the same transition table and differ only in their objective function during value iteration:
 
 Scoring — minimizes pure expected strokes. This mode finds the mathematically optimal strategy, favoring aggressive plays when the risk-reward is positive. It might tell you to go for a par 5 in two even if there's water in front of the green, because the strokes saved on successful attempts outweigh the penalty on misses.
 
@@ -220,20 +220,20 @@ Aggressive — subtracts $-0.3 \cdot P(\text{green})$ for green-reaching actions
       <H4>Computation budget</H4>
       <P>{String.raw`The DP optimizer's computation breaks down as follows:
 
-Transition sampling: $50 \text{ zones} \times 190 \text{ actions} \times 200 \text{ samples} = 1.9\text{M samples}$ (built once, shared across all modes)
+Transition sampling: $\sim\!50 \text{ zones} \times 100\text{–}220 \text{ actions} \times 100\text{–}350 \text{ samples}$ (adaptive by hazard density; built once, shared across all modes)
 
-Value iteration: $50 \text{ zones} \times 190 \text{ actions} \times 3 \text{ modes} \times \sim\!10 \text{ iterations} \approx 285\text{K evaluations}$
+Value iteration: $50 \text{ zones} \times \text{actions} \times 3 \text{ modes} \times \sim\!10 \text{ iterations} \approx 200\text{–}285\text{K evaluations}$
 
 Policy Monte Carlo: $3 \text{ modes} \times 2{,}000 \text{ trials} = 6\text{K trials}$
 
-Total: ~5–8 seconds per hole, ~120 seconds for 18 holes. All computation runs server-side so the client stays responsive.`}</P>
+Holes are parallelized across $\min(\text{CPUs}, 4)$ worker threads for near-linear speedup. Total: ~2–5 seconds per hole, ~30–60 seconds for 18 holes on a 4-core machine. All computation runs server-side so the client stays responsive.`}</P>
 
       <H4>Constants reference</H4>
       <P>{String.raw`  Zone interval — 20 yards (distance between zone markers)
   Lateral offset — 20 yards (left/right from center line)
-  Bearing step — 2° (aim bearing increment)
-  Bearing range — $\pm$30° from center line bearing (31 bearings total)
-  Samples per action — 200 (Gaussian shots for transition table)
+  Bearing step — adaptive: 4° (<180y), 3° (180–350y), 2° (350y+)
+  Bearing range — $\pm$30° from center line bearing (16–31 bearings)
+  Samples per action — adaptive: 100 (safe), 250 (bunkers), 350 (OB/water)
   Rough lie multiplier — 1.15× std deviation
   Carry ratio range — 50%–110% of remaining distance
   Green threshold — 10 yards (ball is "on the green")
