@@ -176,7 +176,7 @@ function fmtDepth(depth: Depth): string {
 // Prose generation
 // ---------------------------------------------------------------------------
 
-function generateDescription(
+export function generateDescription(
   hole: CourseHole,
   teeBox: string,
   allHoles: CourseHole[],

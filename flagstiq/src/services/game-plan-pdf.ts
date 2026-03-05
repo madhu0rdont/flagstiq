@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { bearingBetween } from '../utils/geo';
+import { generateDescription } from '../components/strategy/HoleInfoPanel';
 import type { GamePlan, HolePlan } from './game-plan';
 import type { AimPoint } from './strategy-optimizer';
 import type { CourseHole } from '../models/course';
@@ -506,10 +507,16 @@ function renderNineHeader(doc: jsPDF, label: string, y: number): number {
   return y;
 }
 
-function measureCard(doc: jsPDF, hole: HolePlan, hasMap: boolean): number {
+function measureCard(doc: jsPDF, hole: HolePlan, hasMap: boolean, description?: string): number {
   const PAD = 10;
   const textWidth = hasMap ? CONTENT_WIDTH - MAP_SIZE - MAP_GAP - 14 : CONTENT_WIDTH - 36;
   let h = 42;
+  // Description line
+  if (description) {
+    setFont(doc, 'normal', 7, C.textMuted);
+    const descLines = doc.splitTextToSize(description, textWidth);
+    h += descLines.length * 9 + 2;
+  }
   if (hole.strategy.aimPoints.length > 0) {
     setFont(doc, 'normal', 7.5, C.textMuted);
     for (const ap of hole.strategy.aimPoints) {
@@ -529,13 +536,14 @@ function renderHoleCard(
   hole: HolePlan,
   y: number,
   mapDataUrl: string | null,
+  description?: string,
 ): number {
   const hasMap = mapDataUrl !== null;
   // Use app's accent colors (matches GamePlanView BORDER_COLORS)
   const accentColor: RGB =
     hole.colorCode === 'green' ? C.green :
     hole.colorCode === 'yellow' ? C.yellow : C.red;
-  const cardH = measureCard(doc, hole, hasMap);
+  const cardH = measureCard(doc, hole, hasMap, description);
 
   y = ensureSpace(doc, y, cardH + 4);
 
@@ -595,9 +603,19 @@ function renderHoleCard(
     doc.text(clubSeq, textLeft + nameW + 10, ry, { maxWidth: maxClubW });
   }
 
+  // Description prose (e.g. "Dogleg left — plays shorter at 370 yards downhill...")
+  if (description) {
+    ry += 12;
+    setFont(doc, 'normal', 7, C.textMuted);
+    doc.setFont('helvetica', 'italic');
+    const descLines = doc.splitTextToSize(description, textWidth);
+    doc.text(descLines, textLeft, ry);
+    ry += descLines.length * 9;
+  }
+
   // Row 3+: Caddy tips
   if (hole.strategy.aimPoints.length > 0) {
-    ry += 14;
+    ry += description ? 8 : 14;
     for (const ap of hole.strategy.aimPoints) {
       const carryPart = ap.carry > 0 ? `${ap.carry}y${ap.carryNote ? ` (${ap.carryNote})` : ''} - ` : '';
       // Shot number in medium weight
@@ -648,7 +666,12 @@ export function exportGamePlanPDF(plan: GamePlan, courseHoles?: CourseHole[]): v
     if (totalHoles > 9 && i === 9) y = renderNineHeader(doc, 'BACK NINE', y);
 
     const mapUrl = holeMaps.get(plan.holes[i].holeNumber) ?? null;
-    y = renderHoleCard(doc, plan.holes[i], y, mapUrl);
+    let desc: string | undefined;
+    if (courseHoles) {
+      const ch = courseHoles.find((h) => h.holeNumber === plan.holes[i].holeNumber);
+      if (ch) desc = generateDescription(ch, plan.teeBox, courseHoles);
+    }
+    y = renderHoleCard(doc, plan.holes[i], y, mapUrl, desc);
   }
 
   doc.save(`${plan.courseName.replace(/\s+/g, '_')}_GamePlan.pdf`);
