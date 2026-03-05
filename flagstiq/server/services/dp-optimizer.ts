@@ -58,7 +58,9 @@ const ZONE_INTERVAL = 20;        // yards between zone markers along centerline
 const LATERAL_OFFSET = 20;       // yards left/right of centerline
 const BEARING_RANGE = 30;        // ±degrees from pin bearing
 const TEE_LOOK_AHEAD = 200;     // yards — center tee bearing fan on driver landing zone
-const SAMPLES_PER_ACTION = 200;
+const SAMPLES_BASE = 100;       // minimum samples for safe zones
+const SAMPLES_HAZARD = 250;     // zones with hazards in play
+const SAMPLES_HIGH_RISK = 350;  // zones with OB or water in play
 const GREEN_RADIUS = 10;         // yards — terminal zone threshold
 const ROUGH_LIE_MULTIPLIER = 1.15; // rough increases std by 15%
 const MAX_VALUE_ITERATIONS = 50;
@@ -329,6 +331,43 @@ function getAimBearings(
 }
 
 // ---------------------------------------------------------------------------
+// Adaptive Sampling
+// ---------------------------------------------------------------------------
+
+const HIGH_RISK_TYPES = new Set(['ob', 'water']);
+const PENALTY_TYPES = new Set(['ob', 'water', 'bunker', 'fairway_bunker', 'greenside_bunker']);
+
+/**
+ * Determine how many MC samples a zone needs based on nearby hazard density.
+ * Zones with OB/water in the landing area need the most samples for accuracy;
+ * zones with only bunkers need moderate samples; safe zones need fewer.
+ */
+function samplesForZone(zone: Zone, maxCarry: number, hazards: HazardFeature[]): number {
+  let hasHighRisk = false;
+  let hasPenalty = false;
+
+  for (const h of hazards) {
+    if (!PENALTY_TYPES.has(h.type) || h.polygon.length === 0) continue;
+
+    // Check if any vertex of the hazard polygon is within carry range of the zone
+    const inRange = h.polygon.some(
+      (pt) => haversineYards(zone.position, pt) <= maxCarry * 1.3,
+    );
+    if (!inRange) continue;
+
+    if (HIGH_RISK_TYPES.has(h.type)) {
+      hasHighRisk = true;
+      break; // no need to check further
+    }
+    hasPenalty = true;
+  }
+
+  if (hasHighRisk) return SAMPLES_HIGH_RISK;
+  if (hasPenalty) return SAMPLES_HAZARD;
+  return SAMPLES_BASE;
+}
+
+// ---------------------------------------------------------------------------
 // Transition Sampling
 // ---------------------------------------------------------------------------
 
@@ -340,6 +379,7 @@ function sampleTransitions(
   zones: Zone[],
   greenZoneId: number,
   roughPenalty: number,
+  sampleCount: number,
 ): TransitionResult {
   const counts = new Map<number, number>();
   let totalPenalty = 0;
@@ -349,7 +389,7 @@ function sampleTransitions(
 
   const lieMultiplier = zone.lie === 'rough' ? ROUGH_LIE_MULTIPLIER : 1.0;
 
-  for (let i = 0; i < SAMPLES_PER_ACTION; i++) {
+  for (let i = 0; i < sampleCount; i++) {
     const carry = gaussianSample(club.meanCarry, club.stdCarry * lieMultiplier);
     const offline = gaussianSample(club.meanOffline, club.stdOffline * lieMultiplier);
 
@@ -387,21 +427,20 @@ function sampleTransitions(
     }
   }
 
-  const n = SAMPLES_PER_ACTION;
   const transitions = new Map<number, number>();
   for (const [zoneId, count] of counts) {
-    transitions.set(zoneId, count / n);
+    transitions.set(zoneId, count / sampleCount);
   }
 
-  const expectedPenaltyVal = totalPenalty / n;
-  const penaltyVariance = totalPenaltySq / n - expectedPenaltyVal * expectedPenaltyVal;
+  const expectedPenaltyVal = totalPenalty / sampleCount;
+  const penaltyVariance = totalPenaltySq / sampleCount - expectedPenaltyVal * expectedPenaltyVal;
 
   return {
     transitions,
     expectedPenalty: expectedPenaltyVal,
     penaltyVariance: Math.max(0, penaltyVariance),
-    pGreen: greenCount / n,
-    pFairway: fairwayCount / n,
+    pGreen: greenCount / sampleCount,
+    pFairway: fairwayCount / sampleCount,
   };
 }
 
@@ -433,15 +472,19 @@ function buildTransitionTable(
   const greenZoneId = zones[zones.length - 1].id;
   const entries: TransitionTableEntry[] = [];
 
+  // Find max carry across all clubs for hazard proximity check
+  const maxCarry = distributions.reduce((m, d) => Math.max(m, d.meanCarry + 2 * d.stdCarry), 0);
+
   for (const zone of zones) {
     if (zone.isTerminal) continue;
 
     const clubs = getEligibleClubs(zone, distributions);
     const bearings = getAimBearings(zone, pin, bearingStep);
+    const sampleCount = samplesForZone(zone, maxCarry, hole.hazards);
 
     for (let ci = 0; ci < clubs.length; ci++) {
       for (let bi = 0; bi < bearings.length; bi++) {
-        const result = sampleTransitions(zone, clubs[ci], bearings[bi], hole, zones, greenZoneId, roughPenalty);
+        const result = sampleTransitions(zone, clubs[ci], bearings[bi], hole, zones, greenZoneId, roughPenalty, sampleCount);
         entries.push({
           key: { zoneId: zone.id, clubIdx: ci, bearingIdx: bi },
           club: clubs[ci],
