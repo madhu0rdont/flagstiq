@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useHandicap } from '../../hooks/useHandicap';
 import { LogOut } from 'lucide-react';
 
-const NAV_SECTIONS = [
+const PLAYER_SECTIONS = [
   {
     label: 'Overview',
     items: [
@@ -27,6 +27,20 @@ const NAV_SECTIONS = [
   },
 ];
 
+const ADMIN_SECTIONS = [
+  {
+    label: 'Admin',
+    items: [
+      { to: '/admin', icon: '🛡', label: 'Dashboard' },
+      { to: '/admin/courses', icon: '🗺', label: 'Courses' },
+      { to: '/admin/penalties', icon: '🛡', label: 'Penalties' },
+      { to: '/admin/import', icon: '📥', label: 'Import Course' },
+      { to: '/admin/users', icon: '👥', label: 'Users' },
+      { to: '/admin/usage', icon: '📊', label: 'Usage & Spend' },
+    ],
+  },
+];
+
 interface MobileDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -37,8 +51,11 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const { user, logout } = useAuth();
   const { handicap } = useHandicap();
 
+  const isAdmin = user?.role === 'admin';
+  const navSections = isAdmin ? ADMIN_SECTIONS : PLAYER_SECTIONS;
+
   const isActive = (to: string) =>
-    to === '/' ? pathname === '/' : pathname.startsWith(to);
+    to === '/admin' ? pathname === '/admin' : to === '/' ? pathname === '/' : pathname.startsWith(to);
 
   const initials = (user?.displayName || user?.username || '?').slice(0, 2).toUpperCase();
 
@@ -95,7 +112,7 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
 
         {/* Nav sections */}
         <div className="flex-1 overflow-y-auto">
-          {NAV_SECTIONS.map((section) => (
+          {navSections.map((section) => (
             <div key={section.label}>
               <div className="font-mono text-[9px] tracking-[0.3em] uppercase text-white/25 px-6 pt-4 pb-1.5">
                 {section.label}
