@@ -122,14 +122,23 @@ export function StrategyPanel({ strategies, selectedIdx, onSelect, shotCount, is
                   <p className="text-xs text-text-muted mt-0.5">{s.tip}</p>
                 )}
                 {opt && opt.aimPoints.length > 0 && (
-                  <div className="mt-1 flex flex-col gap-0.5">
+                  <div className="mt-1.5 flex flex-col gap-1">
                     {opt.aimPoints
                       .filter((_, j) => isSelected || j === 0)
                       .map((ap) => (
-                      <p key={ap.shotNumber} className="text-[10px] text-text-muted">
-                        <span className="font-semibold text-text-medium">{ap.shotNumber}.</span>{' '}
-                        {ap.tip}{ap.carryNote ? ` (${ap.carryNote})` : ''}
-                      </p>
+                      <div key={ap.shotNumber} className="flex items-start gap-1.5">
+                        <span className="flex-shrink-0 flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary mt-0.5">
+                          {ap.shotNumber}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-text-dark">
+                            {ap.clubName}{ap.carry > 0 ? ` (${ap.carry}y)` : ''}
+                          </p>
+                          <p className="text-[11px] text-text-medium leading-snug">
+                            {ap.tip}{ap.carryNote ? ` (${ap.carryNote})` : ''}
+                          </p>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
