@@ -25,10 +25,10 @@ export function HelpSheet({ open, onClose, title, children }: HelpSheetProps) {
     <dialog
       ref={dialogRef}
       onClose={onClose}
-      className="w-full max-w-lg rounded-sm border border-border bg-card p-0 text-text-dark shadow-[var(--shadow-card)] backdrop:bg-black/30"
+      className="w-full max-w-lg rounded-sm border border-border bg-surface p-0 text-text-dark shadow-[var(--shadow-card)] backdrop:bg-black/30"
       style={{ maxHeight: '85vh' }}
     >
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-4 py-3 rounded-t-sm">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-surface px-4 py-3 rounded-t-sm">
         <h2 className="font-display text-lg font-light text-text-dark">{title}</h2>
         <button onClick={onClose} className="rounded-sm p-1 text-text-muted hover:text-text-dark">
           <X size={20} />

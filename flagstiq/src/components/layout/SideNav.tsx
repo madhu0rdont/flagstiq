@@ -1,17 +1,18 @@
 import { Link, useLocation } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
+import { useHandicap } from '../../hooks/useHandicap';
 
 const NAV_SECTIONS = [
   {
     label: 'Overview',
     items: [
       { to: '/', icon: '⛳', label: 'Dashboard' },
-      { to: '/sessions', icon: '📋', label: 'Rounds' },
     ],
   },
   {
     label: 'Practice',
     items: [
+      { to: '/sessions', icon: '📋', label: 'Rounds' },
       { to: '/yardage', icon: '📐', label: 'Yardage Book' },
       { to: '/practice', icon: '🎯', label: 'Drills' },
     ],
@@ -33,6 +34,7 @@ const BOTTOM_LINKS = [
 export function SideNav() {
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const { handicap } = useHandicap();
 
   const isActive = (to: string) =>
     to === '/' ? pathname === '/' : pathname.startsWith(to);
@@ -69,9 +71,11 @@ export function SideNav() {
           <div className="text-[13px] font-normal text-[#E8E2D6] leading-tight">
             {user?.displayName || user?.username || 'Golfer'}
           </div>
-          <div className="font-mono text-[10px] tracking-[0.1em] text-gold-light opacity-80">
-            HCP
-          </div>
+          {handicap != null && (
+            <div className="font-mono text-[10px] tracking-[0.1em] text-gold-light opacity-80">
+              HCP {handicap.toFixed(1)}
+            </div>
+          )}
         </div>
       </div>
 

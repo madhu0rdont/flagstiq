@@ -25,7 +25,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
     <dialog
       ref={dialogRef}
       onClose={onClose}
-      className="w-full max-w-lg rounded-none border border-card-border bg-card backdrop-blur-[8px] p-0 text-text-dark shadow-[var(--shadow-card)] backdrop:bg-black/30"
+      className="w-full max-w-lg rounded-none border border-card-border bg-surface p-0 text-text-dark shadow-[var(--shadow-card)] backdrop:bg-black/30"
     >
       <div className="flex items-center justify-between border-b border-card-border px-4 py-3">
         <h2 className="font-display text-lg font-light text-text-dark">{title}</h2>

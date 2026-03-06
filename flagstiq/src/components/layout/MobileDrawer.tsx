@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
+import { useHandicap } from '../../hooks/useHandicap';
 import { LogOut } from 'lucide-react';
 
 const NAV_SECTIONS = [
@@ -7,12 +8,12 @@ const NAV_SECTIONS = [
     label: 'Overview',
     items: [
       { to: '/', icon: '⛳', label: 'Dashboard' },
-      { to: '/sessions', icon: '📋', label: 'Rounds' },
     ],
   },
   {
     label: 'Practice',
     items: [
+      { to: '/sessions', icon: '📋', label: 'Rounds' },
       { to: '/yardage', icon: '📐', label: 'Yardage Book' },
       { to: '/practice', icon: '🎯', label: 'Drills' },
     ],
@@ -34,6 +35,7 @@ interface MobileDrawerProps {
 export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
+  const { handicap } = useHandicap();
 
   const isActive = (to: string) =>
     to === '/' ? pathname === '/' : pathname.startsWith(to);
@@ -83,9 +85,11 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
             <div className="text-sm font-normal text-[#E8E2D6]">
               {user?.displayName || user?.username || 'Golfer'}
             </div>
-            <div className="font-mono text-[10px] tracking-[0.1em] text-gold-light opacity-80">
-              HCP
-            </div>
+            {handicap != null && (
+              <div className="font-mono text-[10px] tracking-[0.1em] text-gold-light opacity-80">
+                HCP {handicap.toFixed(1)}
+              </div>
+            )}
           </div>
         </div>
 
