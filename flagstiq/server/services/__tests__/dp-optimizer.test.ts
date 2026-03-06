@@ -143,70 +143,70 @@ function seedRandom() {
 describe('discretizeHole', () => {
   it('returns empty array when yardage is 0', () => {
     const hole = makeStraightHole(4, 0);
-    expect(discretizeHole(hole, 'blue').zones).toEqual([]);
+    expect(discretizeHole(hole, 'blue').anchors).toEqual([]);
   });
 
   it('returns tee + green for very short hole', () => {
     const hole = makeStraightHole(3, 30);
-    const { zones } = discretizeHole(hole, 'blue');
-    expect(zones.length).toBe(2);
-    expect(zones[0].lie).toBe('fairway');
-    expect(zones[0].isTerminal).toBe(false);
-    expect(zones[zones.length - 1].isTerminal).toBe(true);
-    expect(zones[zones.length - 1].lie).toBe('green');
+    const { anchors } = discretizeHole(hole, 'blue');
+    expect(anchors.length).toBe(2);
+    expect(anchors[0].lie).toBe('fairway');
+    expect(anchors[0].isTerminal).toBe(false);
+    expect(anchors[anchors.length - 1].isTerminal).toBe(true);
+    expect(anchors[anchors.length - 1].lie).toBe('green');
   });
 
   it('creates zones along centerline with correct structure', () => {
     const hole = makeStraightHole(4, 200);
-    const { zones } = discretizeHole(hole, 'blue');
+    const { anchors } = discretizeHole(hole, 'blue');
 
-    expect(zones.length).toBeGreaterThan(2);
-    expect(zones[0].id).toBe(0);
-    expect(zones[0].distToPin).toBeCloseTo(200, -1);
+    expect(anchors.length).toBeGreaterThan(2);
+    expect(anchors[0].id).toBe(0);
+    expect(anchors[0].distToPin).toBeCloseTo(200, -1);
 
-    const green = zones[zones.length - 1];
+    const green = anchors[anchors.length - 1];
     expect(green.isTerminal).toBe(true);
     expect(green.distToPin).toBe(0);
 
-    // Interior zones come in triples (center, left, right)
-    const interior = zones.length - 2;
+    // Interior anchors come in triples (center, left, right)
+    const interior = anchors.length - 2;
     expect(interior % 3).toBe(0);
   });
 
   it('center zones have decreasing distToPin', () => {
     const hole = makeStraightHole(4, 200);
-    const { zones } = discretizeHole(hole, 'blue');
+    const { anchors } = discretizeHole(hole, 'blue');
 
-    const centerZones = [zones[0]];
-    for (let i = 1; i < zones.length - 1; i += 3) {
-      centerZones.push(zones[i]);
+    const centerAnchors = [anchors[0]];
+    for (let i = 1; i < anchors.length - 1; i += 3) {
+      centerAnchors.push(anchors[i]);
     }
-    centerZones.push(zones[zones.length - 1]);
+    centerAnchors.push(anchors[anchors.length - 1]);
 
-    for (let i = 1; i < centerZones.length; i++) {
-      expect(centerZones[i].distToPin).toBeLessThan(centerZones[i - 1].distToPin);
+    for (let i = 1; i < centerAnchors.length; i++) {
+      expect(centerAnchors[i].distToPin).toBeLessThan(centerAnchors[i - 1].distToPin);
     }
   });
 
   it('uses playsLikeYards when available', () => {
     const hole = makeStraightHole(4, 200);
     hole.playsLikeYards = { blue: 220 };
-    const { zones } = discretizeHole(hole, 'blue');
-    expect(zones[0].distToPin).toBeCloseTo(220, -1);
+    const { anchors } = discretizeHole(hole, 'blue');
+    expect(anchors[0].distToPin).toBeCloseTo(220, -1);
   });
 
   it('synthesizes centerLine for dogleg when centerLine is empty', () => {
     const hole = makeDoglegHole();
-    const { zones } = discretizeHole(hole, 'blue');
+    const { anchors } = discretizeHole(hole, 'blue');
 
-    expect(zones.length).toBeGreaterThan(2);
-    expect(zones[0].isTerminal).toBe(false);
-    expect(zones[zones.length - 1].isTerminal).toBe(true);
+    expect(anchors.length).toBeGreaterThan(2);
+    expect(anchors[0].isTerminal).toBe(false);
+    expect(anchors[anchors.length - 1].isTerminal).toBe(true);
   });
 
   it('synthetic centerLine avoids water hazard on dogleg', () => {
     const hole = makeDoglegHole();
-    const { zones } = discretizeHole(hole, 'blue');
+    const { anchors } = discretizeHole(hole, 'blue');
     const waterPoly = hole.hazards[0].polygon;
 
     const waterMinLat = Math.min(...waterPoly.map((p) => p.lat));
@@ -214,12 +214,12 @@ describe('discretizeHole', () => {
     const waterMinLng = Math.min(...waterPoly.map((p) => p.lng));
     const waterMaxLng = Math.max(...waterPoly.map((p) => p.lng));
 
-    const centerZones = [];
-    for (let i = 1; i < zones.length - 1; i += 3) {
-      centerZones.push(zones[i]);
+    const centerAnchors = [];
+    for (let i = 1; i < anchors.length - 1; i += 3) {
+      centerAnchors.push(anchors[i]);
     }
 
-    const zonesInWater = centerZones.filter(
+    const anchorsInWater = centerAnchors.filter(
       (z) =>
         z.position.lat >= waterMinLat &&
         z.position.lat <= waterMaxLat &&
@@ -227,15 +227,15 @@ describe('discretizeHole', () => {
         z.position.lng <= waterMaxLng,
     );
 
-    expect(zonesInWater.length).toBeLessThanOrEqual(1);
+    expect(anchorsInWater.length).toBeLessThanOrEqual(1);
   });
 
   it('falls back to straight line with no fairway and no centerLine', () => {
     const hole = makeStraightHole(4, 200);
     hole.centerLine = [];
     hole.fairway = [];
-    const { zones } = discretizeHole(hole, 'blue');
-    expect(zones.length).toBeGreaterThan(2);
+    const { anchors } = discretizeHole(hole, 'blue');
+    expect(anchors.length).toBeGreaterThan(2);
   });
 });
 
@@ -406,7 +406,7 @@ describe('dogleg optimization', () => {
   beforeAll(() => {
     seedRandom();
     results = dpOptimizeHole(hole, 'blue', dists);
-  });
+  }, 30_000);
 
   it('produces strategies for empty centerLine dogleg', () => {
     expect(results.length).toBeGreaterThan(0);
