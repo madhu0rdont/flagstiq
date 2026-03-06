@@ -187,16 +187,20 @@ router.post('/:courseId/:teeBox/:mode/generate', async (req, res) => {
     const { rows: shotRows } = await query('SELECT * FROM shots WHERE user_id = $1', [userId]);
     const shots = shotRows.map(toCamel<Shot>);
 
+    // Set up SSE for per-hole progress
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
     // Generate plan across parallel worker threads (non-blocking)
     const roughPenalty = await getRoughPenalty();
-    const plan = await generatePlanParallel({
-      clubs,
-      shots,
-      course,
-      teeBox,
-      mode: mode as ScoringMode,
-      roughPenalty,
-    });
+    const plan = await generatePlanParallel(
+      { clubs, shots, course, teeBox, mode: mode as ScoringMode, roughPenalty },
+      (completed, total) => {
+        res.write(`data: ${JSON.stringify({ type: 'progress', completed, total })}\n\n`);
+      },
+    );
 
     // Upsert cache
     const now = Date.now();
@@ -221,10 +225,16 @@ router.post('/:courseId/:teeBox/:mode/generate', async (req, res) => {
       component: 'game-plan-generate',
     });
 
-    res.json({ ok: true, plan });
+    res.write(`data: ${JSON.stringify({ type: 'done', plan })}\n\n`);
+    res.end();
   } catch (err) {
     logger.error('Failed to generate game plan', { error: String(err) });
-    res.status(500).json({ error: 'Internal server error' });
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: 'Internal server error' })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 });
 

@@ -77,11 +77,16 @@ function runHolesWorker(
   teeBox: string,
   distributions: ClubDistribution[],
   roughPenalty: number,
+  onProgress?: (holeNumber: number) => void,
 ): Promise<HoleResult[]> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(HOLES_WORKER_SCRIPT);
 
-    worker.on('message', (msg: { ok: boolean; results?: HoleResult[]; error?: string }) => {
+    worker.on('message', (msg: { type?: string; ok?: boolean; results?: HoleResult[]; error?: string; holeNumber?: number }) => {
+      if (msg.type === 'progress') {
+        onProgress?.(msg.holeNumber!);
+        return;
+      }
       worker.terminate();
       if (msg.ok && msg.results) {
         resolve(msg.results);
@@ -104,7 +109,10 @@ function runHolesWorker(
  * Generate a game plan by splitting holes across multiple worker threads.
  * Computes club distributions once, then fans out hole batches in parallel.
  */
-export async function generatePlanParallel(input: PlanWorkerInput): Promise<GamePlan> {
+export async function generatePlanParallel(
+  input: PlanWorkerInput,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<GamePlan> {
   const { clubs, shots, course, teeBox, mode, roughPenalty } = input;
 
   // 1. Compute distributions once on main thread (fast, ~50ms)
@@ -128,9 +136,14 @@ export async function generatePlanParallel(input: PlanWorkerInput): Promise<Game
     batches[i % workerCount].push(holes[i]);
   }
 
-  // 3. Spawn workers in parallel
+  // 3. Spawn workers in parallel, tracking per-hole progress
+  let completed = 0;
+  const handleHoleProgress = onProgress
+    ? () => { completed++; onProgress(completed, holes.length); }
+    : undefined;
+
   const batchResults = await Promise.all(
-    batches.map((batch) => runHolesWorker(batch, teeBox, distributions, roughPenalty)),
+    batches.map((batch) => runHolesWorker(batch, teeBox, distributions, roughPenalty, handleHoleProgress)),
   );
 
   // 4. Merge results into a single map

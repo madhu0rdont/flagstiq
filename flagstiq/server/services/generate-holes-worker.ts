@@ -23,9 +23,12 @@ parentPort?.on('message', (msg) => {
       }
 
       results.push({ holeNumber: hole.holeNumber, strategies });
+
+      // Report per-hole progress
+      parentPort?.postMessage({ type: 'progress', holeNumber: hole.holeNumber });
     }
 
-    parentPort?.postMessage({ ok: true, results });
+    parentPort?.postMessage({ type: 'done', ok: true, results });
   } catch (err) {
     parentPort?.postMessage({ ok: false, error: String(err) });
   }

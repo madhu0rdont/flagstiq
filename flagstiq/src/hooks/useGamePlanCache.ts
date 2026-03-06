@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { fetcher } from '../lib/fetcher';
-import { api } from '../lib/api';
 import type { GamePlan } from '../services/game-plan';
 import type { CourseWithHoles } from '../models/course';
 
@@ -78,8 +77,39 @@ export function useGamePlanCache(
     setProgress({ current: 0, total: course.holes.length });
 
     try {
-      // Generate plan on server (DP optimizer)
-      await api.post(`/game-plans/${course.id}/${teeBox}/scoring/generate`, {});
+      // Generate plan on server via SSE for per-hole progress
+      const res = await fetch(`/api/game-plans/${course.id}/${teeBox}/scoring/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: '{}',
+      });
+
+      if (!res.ok) throw new Error(`API ${res.status}`);
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE lines
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const msg = JSON.parse(line.slice(6));
+              if (msg.type === 'progress') {
+                setProgress({ current: msg.completed, total: msg.total });
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
 
       // Revalidate SWR cache + handicap
       if (cacheKey) {
