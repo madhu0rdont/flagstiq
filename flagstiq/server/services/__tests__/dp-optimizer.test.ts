@@ -143,12 +143,12 @@ function seedRandom() {
 describe('discretizeHole', () => {
   it('returns empty array when yardage is 0', () => {
     const hole = makeStraightHole(4, 0);
-    expect(discretizeHole(hole, 'blue')).toEqual([]);
+    expect(discretizeHole(hole, 'blue').zones).toEqual([]);
   });
 
   it('returns tee + green for very short hole', () => {
     const hole = makeStraightHole(3, 30);
-    const zones = discretizeHole(hole, 'blue');
+    const { zones } = discretizeHole(hole, 'blue');
     expect(zones.length).toBe(2);
     expect(zones[0].lie).toBe('fairway');
     expect(zones[0].isTerminal).toBe(false);
@@ -158,7 +158,7 @@ describe('discretizeHole', () => {
 
   it('creates zones along centerline with correct structure', () => {
     const hole = makeStraightHole(4, 200);
-    const zones = discretizeHole(hole, 'blue');
+    const { zones } = discretizeHole(hole, 'blue');
 
     expect(zones.length).toBeGreaterThan(2);
     expect(zones[0].id).toBe(0);
@@ -175,7 +175,7 @@ describe('discretizeHole', () => {
 
   it('center zones have decreasing distToPin', () => {
     const hole = makeStraightHole(4, 200);
-    const zones = discretizeHole(hole, 'blue');
+    const { zones } = discretizeHole(hole, 'blue');
 
     const centerZones = [zones[0]];
     for (let i = 1; i < zones.length - 1; i += 3) {
@@ -191,13 +191,13 @@ describe('discretizeHole', () => {
   it('uses playsLikeYards when available', () => {
     const hole = makeStraightHole(4, 200);
     hole.playsLikeYards = { blue: 220 };
-    const zones = discretizeHole(hole, 'blue');
+    const { zones } = discretizeHole(hole, 'blue');
     expect(zones[0].distToPin).toBeCloseTo(220, -1);
   });
 
   it('synthesizes centerLine for dogleg when centerLine is empty', () => {
     const hole = makeDoglegHole();
-    const zones = discretizeHole(hole, 'blue');
+    const { zones } = discretizeHole(hole, 'blue');
 
     expect(zones.length).toBeGreaterThan(2);
     expect(zones[0].isTerminal).toBe(false);
@@ -206,7 +206,7 @@ describe('discretizeHole', () => {
 
   it('synthetic centerLine avoids water hazard on dogleg', () => {
     const hole = makeDoglegHole();
-    const zones = discretizeHole(hole, 'blue');
+    const { zones } = discretizeHole(hole, 'blue');
     const waterPoly = hole.hazards[0].polygon;
 
     const waterMinLat = Math.min(...waterPoly.map((p) => p.lat));
@@ -234,7 +234,7 @@ describe('discretizeHole', () => {
     const hole = makeStraightHole(4, 200);
     hole.centerLine = [];
     hole.fairway = [];
-    const zones = discretizeHole(hole, 'blue');
+    const { zones } = discretizeHole(hole, 'blue');
     expect(zones.length).toBeGreaterThan(2);
   });
 });

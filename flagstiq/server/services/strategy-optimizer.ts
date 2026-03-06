@@ -98,6 +98,163 @@ export function greedyClub(target: number, clubs: ClubDistribution[]): ClubDistr
 }
 
 // ---------------------------------------------------------------------------
+// Elevation Profile
+// ---------------------------------------------------------------------------
+
+export const ELEV_YARDS_PER_METER = 1.09; // ~1 yard per 3 feet of elevation change
+const ELEV_PROFILE_STEP = 10;      // yards between elevation profile samples
+
+export interface ElevationProfile {
+  /** Elevation samples at ELEV_PROFILE_STEP-yard intervals from tee to pin */
+  samples: number[];
+  totalDist: number;
+}
+
+/**
+ * Build an O(1)-lookup elevation profile from the centerLine.
+ * Each entry is the elevation (meters) at that distance along the centerLine.
+ */
+export function buildElevationProfile(
+  centerLine: { lat: number; lng: number; elevation: number }[],
+  tee: { lat: number; lng: number; elevation: number },
+  pin: { lat: number; lng: number; elevation: number },
+  fallbackBearing: number,
+  totalDist: number,
+): ElevationProfile {
+  const samples: number[] = [];
+
+  for (let d = 0; d <= totalDist; d += ELEV_PROFILE_STEP) {
+    const elev = interpolateElevation(centerLine, tee, pin, fallbackBearing, d, totalDist);
+    samples.push(elev);
+  }
+
+  return { samples, totalDist };
+}
+
+/**
+ * Interpolate elevation at a given distance along the centerLine.
+ * Falls back to linear tee→pin interpolation when centerLine has no real elevation data.
+ */
+function interpolateElevation(
+  centerLine: { lat: number; lng: number; elevation: number }[],
+  tee: { lat: number; lng: number; elevation: number },
+  pin: { lat: number; lng: number; elevation: number },
+  _fallbackBearing: number,
+  targetDist: number,
+  totalDist: number,
+): number {
+  // If centerLine has real elevation data (non-zero), interpolate from it
+  if (centerLine.length >= 2 && centerLine.some((p) => p.elevation !== 0)) {
+    let cumDist = 0;
+    let prev = centerLine[0];
+    for (let i = 1; i < centerLine.length; i++) {
+      const segDist = haversineYards(prev, centerLine[i]);
+      if (cumDist + segDist >= targetDist) {
+        const fraction = segDist > 0 ? (targetDist - cumDist) / segDist : 0;
+        return prev.elevation + (centerLine[i].elevation - prev.elevation) * fraction;
+      }
+      cumDist += segDist;
+      prev = centerLine[i];
+    }
+    return prev.elevation; // past end — use last point
+  }
+
+  // Fallback: linear interpolation from tee to pin elevation
+  if (totalDist > 0) {
+    const fraction = Math.min(targetDist / totalDist, 1);
+    return tee.elevation + (pin.elevation - tee.elevation) * fraction;
+  }
+  return tee.elevation;
+}
+
+/** Compute local slope (meters/yard) at a point along the profile. Positive = uphill. */
+export function getProfileSlope(profile: ElevationProfile, distFromTee: number): number {
+  const delta = ELEV_PROFILE_STEP;
+  const before = getProfileElevation(profile, distFromTee - delta / 2);
+  const after = getProfileElevation(profile, distFromTee + delta / 2);
+  return (after - before) / delta;
+}
+
+/** O(1) lookup into pre-computed elevation profile. */
+export function getProfileElevation(profile: ElevationProfile, distFromTee: number): number {
+  const clamped = Math.max(0, Math.min(distFromTee, profile.totalDist));
+  const idx = clamped / ELEV_PROFILE_STEP;
+  const lo = Math.floor(idx);
+  const hi = Math.min(lo + 1, profile.samples.length - 1);
+  const frac = idx - lo;
+  if (lo >= profile.samples.length) return profile.samples[profile.samples.length - 1];
+  return profile.samples[lo] + frac * (profile.samples[hi] - profile.samples[lo]);
+}
+
+// ---------------------------------------------------------------------------
+// Rollout Model
+// ---------------------------------------------------------------------------
+
+const SURFACE_ROLLOUT: Record<string, number> = {
+  fairway: 1.0,
+  rough: 0.3,
+  green: 0.65,
+  bunker: 0.0,
+};
+const DEFAULT_LOFT = 30;
+
+const ROLLOUT_SLOPE_FACTOR = 3.0; // rollout adjustment per unit slope (m/yd)
+
+/**
+ * Compute rollout distance for a shot based on club data, landing surface, and slope.
+ * Rollout is proportional to carry: rollout = carry × rolloutFraction × surfaceMultiplier × slopeMultiplier.
+ * Optional localSlope (meters elevation per yard of ground distance) adjusts rollout:
+ * downhill (negative slope) = more rollout, uphill (positive) = less.
+ */
+export function computeRollout(
+  carry: number,
+  club: ClubDistribution,
+  carryLanding: { lat: number; lng: number },
+  hole: CourseHole,
+  localSlope?: number,
+): number {
+  // Rollout fraction: from measured data or loft-based imputation
+  let frac: number;
+  if (club.meanTotal != null && club.meanTotal > club.meanCarry) {
+    frac = (club.meanTotal - club.meanCarry) / club.meanCarry;
+  } else {
+    const loft = club.loft ?? DEFAULT_LOFT;
+    frac = Math.max(0, 0.12 * Math.exp(-0.05 * loft));
+  }
+
+  // Determine landing surface — bunker/water kills rollout
+  const hazard = checkHazards(carryLanding, hole.hazards);
+  let surface: string;
+  if (hazard.inHazard) {
+    surface = hazard.hazardType?.includes('bunker') ? 'bunker' : 'water';
+  } else {
+    surface = classifyLieLocal(carryLanding, hole.fairway, hole.green);
+  }
+
+  const multiplier = SURFACE_ROLLOUT[surface] ?? 0;
+
+  // Slope factor: downhill landing = more rollout, uphill = less
+  const slopeMultiplier = localSlope != null
+    ? Math.max(0.5, Math.min(1.5, 1 - localSlope * ROLLOUT_SLOPE_FACTOR))
+    : 1.0;
+
+  return carry * frac * multiplier * slopeMultiplier;
+}
+
+/** Classify lie at a position — fairway, rough, or green. */
+function classifyLieLocal(
+  pos: { lat: number; lng: number },
+  fairwayPolygons: { lat: number; lng: number }[][],
+  greenPoly: { lat: number; lng: number }[],
+): 'fairway' | 'rough' | 'green' {
+  if (greenPoly.length >= 3 && pointInPolygon(pos, greenPoly)) return 'green';
+  for (const fw of fairwayPolygons) {
+    if (fw.length >= 3 && pointInPolygon(pos, fw)) return 'fairway';
+  }
+  return 'rough';
+}
+
+// ---------------------------------------------------------------------------
 // Rough Penalty (from hazard_penalties table)
 // ---------------------------------------------------------------------------
 
@@ -632,7 +789,8 @@ export function expectedLanding(
   shotBearing: number,
   club: ClubDistribution,
 ): { lat: number; lng: number } {
-  let landing = projectPoint(from, shotBearing, club.meanCarry);
+  const totalDist = club.meanTotal ?? club.meanCarry;
+  let landing = projectPoint(from, shotBearing, totalDist);
   if (Math.abs(club.meanOffline) > 0.5) {
     landing = projectPoint(landing, shotBearing + 90, club.meanOffline);
   }
@@ -863,6 +1021,13 @@ export function simulateHoleGPS(
   const minClubCarry = Math.min(...distributions.map((c) => c.meanCarry));
   const chipThreshold = Math.max(HOLE_THRESHOLD, minClubCarry * 0.5);
 
+  // Build elevation profile for per-shot carry adjustment
+  const totalDist = haversineYards(tee, pin);
+  const fallbackBearing = bearingBetween(tee, pin);
+  const elevProfile = buildElevationProfile(
+    hole.centerLine ?? [], hole.tee, hole.pin, fallbackBearing, totalDist,
+  );
+
   const trialScores: number[] = [];
   let fairwayHits = 0;
 
@@ -879,7 +1044,15 @@ export function simulateHoleGPS(
       const compensatedAim = compensateForBias(shot.aimPoint, rawBearing, shot.clubDist);
       const shotBearing = bearingBetween(currentPos, compensatedAim);
 
-      let landing = projectPoint(currentPos, shotBearing, carry);
+      // Elevation-adjusted ground carry
+      const distFromTee = totalDist - haversineYards(currentPos, pin);
+      const srcElev = getProfileElevation(elevProfile, Math.max(0, distFromTee));
+      const landingDist = distFromTee + carry;
+      const landingElev = getProfileElevation(elevProfile, landingDist);
+      const elevDelta = landingElev - srcElev;
+      const adjCarry = carry - elevDelta * ELEV_YARDS_PER_METER;
+
+      let landing = projectPoint(currentPos, shotBearing, adjCarry);
 
       if (Math.abs(offline) > 0.5) {
         landing = projectPoint(landing, shotBearing + 90, offline);
@@ -892,6 +1065,11 @@ export function simulateHoleGPS(
       if (treeHit.hitTrees) {
         landing = projectPoint(currentPos, shotBearing, treeHit.hitDistance);
         strokes += 0.5;
+      } else {
+        // Apply rollout: carry landing → resting position (slope-adjusted)
+        const slope = getProfileSlope(elevProfile, landingDist);
+        const rollout = computeRollout(carry, shot.clubDist, landing, hole, slope);
+        if (rollout > 0.5) landing = projectPoint(landing, shotBearing, rollout);
       }
 
       const hazDrop = resolveHazardDrop(currentPos, landing, hole.hazards, hole.fairway, hole.green, roughPenalty);
@@ -912,14 +1090,25 @@ export function simulateHoleGPS(
 
     let distToPin = haversineYards(currentPos, pin);
     while (!isOnGreen(currentPos, hole.green, hole.pin) && distToPin > chipThreshold && strokes < MAX_SHOTS_PER_HOLE) {
-      const club = greedyClub(distToPin, distributions);
+      // Elevation-adjusted club selection for greedy loop
+      const greedyDistFromTee = totalDist - distToPin;
+      const greedyElev = getProfileElevation(elevProfile, Math.max(0, greedyDistFromTee));
+      const greedyElevAdj = (hole.pin.elevation - greedyElev) * ELEV_YARDS_PER_METER;
+      const club = greedyClub(distToPin + greedyElevAdj, distributions);
+
       const carry = gaussianSample(club.meanCarry, club.stdCarry);
       const offline = gaussianSample(club.meanOffline, club.stdOffline);
       const greedyBearing = bearingBetween(currentPos, pin);
       const compensatedGreedyAim = compensateForBias(pin, greedyBearing, club);
       const shotBearing = bearingBetween(currentPos, compensatedGreedyAim);
 
-      let landing = projectPoint(currentPos, shotBearing, carry);
+      // Elevation-adjusted ground carry
+      const greedyLandingDist = Math.max(0, greedyDistFromTee) + carry;
+      const greedyLandingElev = getProfileElevation(elevProfile, greedyLandingDist);
+      const greedyCarryElevDelta = greedyLandingElev - greedyElev;
+      const greedyAdjCarry = carry - greedyCarryElevDelta * ELEV_YARDS_PER_METER;
+
+      let landing = projectPoint(currentPos, shotBearing, greedyAdjCarry);
       if (Math.abs(offline) > 0.5) {
         landing = projectPoint(landing, shotBearing + 90, offline);
       }
@@ -931,6 +1120,10 @@ export function simulateHoleGPS(
       if (greedyTreeHit.hitTrees) {
         landing = projectPoint(currentPos, shotBearing, greedyTreeHit.hitDistance);
         strokes += 0.5;
+      } else {
+        const greedySlope = getProfileSlope(elevProfile, greedyLandingDist);
+        const rollout = computeRollout(carry, club, landing, hole, greedySlope);
+        if (rollout > 0.5) landing = projectPoint(landing, shotBearing, rollout);
       }
 
       const hazDrop = resolveHazardDrop(currentPos, landing, hole.hazards, hole.fairway, hole.green, roughPenalty);

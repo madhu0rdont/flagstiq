@@ -15,8 +15,13 @@ import {
   MAX_SHOTS_PER_HOLE,
   DEFAULT_TRIALS,
   isOnGreen,
+  computeRollout,
+  buildElevationProfile,
+  getProfileElevation,
+  getProfileSlope,
+  ELEV_YARDS_PER_METER,
 } from './strategy-optimizer.js';
-import type { OptimizedStrategy, NamedStrategyPlan, AimPoint } from './strategy-optimizer.js';
+import type { OptimizedStrategy, NamedStrategyPlan, AimPoint, ElevationProfile } from './strategy-optimizer.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,6 +34,8 @@ interface Zone {
   position: { lat: number; lng: number };
   lie: 'fairway' | 'rough' | 'green';
   distToPin: number;
+  elevation: number;       // meters above sea level (from centerLine)
+  distFromTee: number;     // yards along centerLine from tee
   isTerminal: boolean;
   localBearing: number;
 }
@@ -83,12 +90,12 @@ const MODE_LABELS: Record<ScoringMode, { name: string; type: 'scoring' | 'safe' 
 export function discretizeHole(
   hole: CourseHole,
   teeBox: string,
-): Zone[] {
+): { zones: Zone[]; elevProfile: ElevationProfile } {
   const tee = { lat: hole.tee.lat, lng: hole.tee.lng };
   const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
   const heading = bearingBetween(tee, pin);
   const totalDist = hole.playsLikeYards?.[teeBox] ?? hole.yardages[teeBox] ?? Object.values(hole.yardages)[0] ?? 0;
-  if (totalDist === 0) return [];
+  if (totalDist === 0) return { zones: [], elevProfile: { samples: [], totalDist: 0 } };
 
   const fairwayPolygons = hole.fairway ?? [];
   let centerLine = hole.centerLine ?? [];
@@ -98,8 +105,10 @@ export function discretizeHole(
   const greenPoly = hole.green ?? [];
   const zones: Zone[] = [];
 
+  // Build elevation profile from centerLine (O(1) lookup for per-shot elevation)
+  const elevProfile = buildElevationProfile(centerLine, hole.tee, hole.pin, heading, totalDist);
+
   // Tee zone — look ahead to the driver landing zone (~200y), not just 20y.
-  // On doglegs, the first 20y is straight; the curve is at 150-250y.
   const teeLookAhead = Math.min(TEE_LOOK_AHEAD, totalDist - GREEN_RADIUS);
   const teeBearing = centerLine.length >= 2
     ? bearingBetween(tee, interpolateCenterLine(centerLine, tee, heading, teeLookAhead))
@@ -109,6 +118,8 @@ export function discretizeHole(
     position: tee,
     lie: 'fairway',
     distToPin: totalDist,
+    elevation: hole.tee.elevation,
+    distFromTee: 0,
     isTerminal: false,
     localBearing: teeBearing,
   });
@@ -116,6 +127,7 @@ export function discretizeHole(
   // Walk centerline in intervals
   for (let d = ZONE_INTERVAL; d < totalDist - GREEN_RADIUS; d += ZONE_INTERVAL) {
     const centerPos = interpolateCenterLine(centerLine, tee, heading, d);
+    const centerElev = getProfileElevation(elevProfile, d);
     const localBearing = d + ZONE_INTERVAL < totalDist
       ? bearingBetween(centerPos, interpolateCenterLine(centerLine, tee, heading, d + ZONE_INTERVAL))
       : heading;
@@ -133,13 +145,15 @@ export function discretizeHole(
         position: pos,
         lie,
         distToPin,
+        elevation: centerElev,   // left/right zones share center elevation
+        distFromTee: d,
         isTerminal: false,
         localBearing,
       });
     }
   }
 
-  // Green zone (terminal) — localBearing from last centerLine point to pin
+  // Green zone (terminal)
   const greenBearing = centerLine.length >= 2
     ? bearingBetween(centerLine[centerLine.length - 2], pin)
     : heading;
@@ -148,11 +162,13 @@ export function discretizeHole(
     position: pin,
     lie: 'green',
     distToPin: 0,
+    elevation: hole.pin.elevation,
+    distFromTee: totalDist,
     isTerminal: true,
     localBearing: greenBearing,
   });
 
-  return zones;
+  return { zones, elevProfile };
 }
 
 function interpolateCenterLine(
@@ -184,7 +200,7 @@ function interpolateCenterLine(
   return projectPoint(prev, fallbackBearing, targetDist - cumDist);
 }
 
-function classifyLie(
+export function classifyLie(
   pos: { lat: number; lng: number },
   fairwayPolygons: { lat: number; lng: number }[][],
   greenPoly: { lat: number; lng: number }[],
@@ -297,9 +313,12 @@ function findNearestZone(
 function getEligibleClubs(
   zone: Zone,
   distributions: ClubDistribution[],
+  pinElevation: number = 0,
 ): ClubDistribution[] {
   if (zone.isTerminal) return [];
-  const dist = zone.distToPin;
+  // Elevation-adjusted "plays-like" distance to pin
+  const elevAdjust = (pinElevation - zone.elevation) * ELEV_YARDS_PER_METER;
+  const dist = zone.distToPin + elevAdjust;
   const isTee = zone.id === 0;
   return distributions.filter((c) => {
     // Drivers can only be hit from the tee
@@ -381,6 +400,7 @@ function sampleTransitions(
   greenZoneId: number,
   roughPenalty: number,
   sampleCount: number,
+  elevProfile: ElevationProfile,
 ): TransitionResult {
   const counts = new Map<number, number>();
   let totalPenalty = 0;
@@ -394,7 +414,13 @@ function sampleTransitions(
     const carry = gaussianSample(club.meanCarry, club.stdCarry * lieMultiplier);
     const offline = gaussianSample(club.meanOffline, club.stdOffline * lieMultiplier);
 
-    let landing = projectPoint(zone.position, bearing, carry);
+    // Elevation-adjusted ground carry: uphill = shorter, downhill = longer
+    const landingDistFromTee = zone.distFromTee + carry;
+    const landingElev = getProfileElevation(elevProfile, landingDistFromTee);
+    const elevDelta = landingElev - zone.elevation;
+    const adjustedCarry = carry - elevDelta * ELEV_YARDS_PER_METER;
+
+    let landing = projectPoint(zone.position, bearing, adjustedCarry);
     if (Math.abs(offline) > 0.5) {
       landing = projectPoint(landing, bearing + 90, offline);
     }
@@ -406,6 +432,11 @@ function sampleTransitions(
     if (treeHit.hitTrees) {
       landing = projectPoint(zone.position, bearing, treeHit.hitDistance);
       penalty += 0.5;
+    } else {
+      // Apply rollout: carry landing → resting position (slope-adjusted)
+      const slope = getProfileSlope(elevProfile, landingDistFromTee);
+      const rollout = computeRollout(carry, club, landing, hole, slope);
+      if (rollout > 0.5) landing = projectPoint(landing, bearing, rollout);
     }
 
     // Hazard check — OB drops at boundary, bunkers stay in place
@@ -468,8 +499,10 @@ function buildTransitionTable(
   hole: CourseHole,
   roughPenalty: number,
   bearingStep: number,
+  elevProfile: ElevationProfile,
 ): TransitionTableEntry[] {
   const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
+  const pinElev = hole.pin.elevation;
   const greenZoneId = zones[zones.length - 1].id;
   const entries: TransitionTableEntry[] = [];
 
@@ -479,13 +512,13 @@ function buildTransitionTable(
   for (const zone of zones) {
     if (zone.isTerminal) continue;
 
-    const clubs = getEligibleClubs(zone, distributions);
+    const clubs = getEligibleClubs(zone, distributions, pinElev);
     const bearings = getAimBearings(zone, pin, bearingStep);
     const sampleCount = samplesForZone(zone, maxCarry, hole.hazards);
 
     for (let ci = 0; ci < clubs.length; ci++) {
       for (let bi = 0; bi < bearings.length; bi++) {
-        const result = sampleTransitions(zone, clubs[ci], bearings[bi], hole, zones, greenZoneId, roughPenalty, sampleCount);
+        const result = sampleTransitions(zone, clubs[ci], bearings[bi], hole, zones, greenZoneId, roughPenalty, sampleCount, elevProfile);
         entries.push({
           key: { zoneId: zone.id, clubIdx: ci, bearingIdx: bi },
           club: clubs[ci],
@@ -705,9 +738,11 @@ function extractPlan(
   hole: CourseHole,
   teeBox: string,
   mode: ScoringMode,
+  elevProfile: ElevationProfile,
   forcedFirstAction?: { clubIdx: number; bearing: number },
 ): NamedStrategyPlan {
   const pin = { lat: hole.pin.lat, lng: hole.pin.lng };
+  const pinElev = hole.pin.elevation;
   const shots: NamedStrategyPlan['shots'] = [];
 
   // Under the 58-degree (shortest club) distance → can reach the green every time
@@ -724,13 +759,13 @@ function extractPlan(
     let bearing: number;
 
     if (i === 0 && forcedFirstAction) {
-      const clubs = getEligibleClubs(currentZone, distributions);
+      const clubs = getEligibleClubs(currentZone, distributions, pinElev);
       club = clubs[forcedFirstAction.clubIdx];
       bearing = forcedFirstAction.bearing;
     } else {
       const entry = policy.get(currentZone.id);
       if (entry) {
-        const clubs = getEligibleClubs(currentZone, distributions);
+        const clubs = getEligibleClubs(currentZone, distributions, pinElev);
         club = clubs[entry.clubIdx];
         bearing = entry.bearing;
       } else {
@@ -742,11 +777,19 @@ function extractPlan(
 
     // If club is undefined (policy miss or index out of range), use greedy club
     if (!club) {
-      club = greedyClub(currentZone.distToPin, distributions);
+      // Elevation-adjusted greedy distance
+      const elevAdj = (pinElev - currentZone.elevation) * ELEV_YARDS_PER_METER;
+      club = greedyClub(currentZone.distToPin + elevAdj, distributions);
       bearing = bearingBetween(currentZone.position, pin);
     }
 
-    const rawLanding = projectPoint(currentZone.position, bearing, club.meanCarry);
+    // Elevation-adjusted total distance for expected landing
+    const totalDist = club.meanTotal ?? club.meanCarry;
+    const elevLandingDist = currentZone.distFromTee + totalDist;
+    const landingElev = getProfileElevation(elevProfile, elevLandingDist);
+    const elevDelta = landingElev - currentZone.elevation;
+    const adjustedTotalDist = totalDist - elevDelta * ELEV_YARDS_PER_METER;
+    const rawLanding = projectPoint(currentZone.position, bearing, adjustedTotalDist);
 
     // Resolve hazards — if ball goes OB/water, landing adjusts to drop point
     const hazDrop = resolveHazardDrop(
@@ -768,7 +811,12 @@ function extractPlan(
     // Within approach threshold — add one final approach to the pin and stop
     // Show the actual approach distance, not the club's full carry
     if (landingDist <= approachThreshold) {
-      const approachClub = greedyClub(landingDist, distributions);
+      // Elevation-adjusted approach club selection
+      const nextZoneForElev = zones.find((z) => z.id === findNearestZone(landing, zones));
+      const approachElevAdj = nextZoneForElev
+        ? (pinElev - nextZoneForElev.elevation) * ELEV_YARDS_PER_METER
+        : 0;
+      const approachClub = greedyClub(landingDist + approachElevAdj, distributions);
       shots.push({
         clubDist: { ...approachClub, meanCarry: landingDist },
         aimPoint: pin,
@@ -789,7 +837,11 @@ function extractPlan(
     const lastShot = shots[shots.length - 1];
     const lastLandingDist = haversineYards(lastShot.aimPoint, pin);
     if (lastLandingDist >= CHIP_RANGE && lastLandingDist <= approachThreshold) {
-      const approachClub = greedyClub(lastLandingDist, distributions);
+      const postZoneForElev = zones.find((z) => z.id === findNearestZone(lastShot.aimPoint, zones));
+      const postElevAdj = postZoneForElev
+        ? (pinElev - postZoneForElev.elevation) * ELEV_YARDS_PER_METER
+        : 0;
+      const approachClub = greedyClub(lastLandingDist + postElevAdj, distributions);
       shots.push({
         clubDist: { ...approachClub, meanCarry: lastLandingDist },
         aimPoint: pin,
@@ -821,6 +873,7 @@ function simulateWithPolicy(
   zones: Zone[],
   policy: Map<number, PolicyEntry>,
   roughPenalty: number,
+  elevProfile: ElevationProfile,
   trials: number = DEFAULT_TRIALS,
 ): OptimizedStrategy {
   const tee = { lat: hole.tee.lat, lng: hole.tee.lng };
@@ -848,7 +901,8 @@ function simulateWithPolicy(
       let shotBearing: number;
 
       const entry = policy.get(currentZoneId);
-      const clubs = entry ? getEligibleClubs(currentZone, distributions) : [];
+      const pinElev = hole.pin.elevation;
+      const clubs = entry ? getEligibleClubs(currentZone, distributions, pinElev) : [];
 
       if (entry && entry.clubIdx < clubs.length) {
         // Policy hit — use the DP-optimal action.
@@ -858,8 +912,9 @@ function simulateWithPolicy(
         const aimPoint = projectPoint(currentZone.position, entry.bearing, club.meanCarry);
         shotBearing = bearingBetween(currentPos, aimPoint);
       } else {
-        // No policy or invalid club index — greedy fallback aimed at pin
-        club = greedyClub(distToPin, distributions);
+        // No policy or invalid club index — greedy fallback aimed at pin with elevation adjustment
+        const greedyElevAdj = (pinElev - currentZone.elevation) * ELEV_YARDS_PER_METER;
+        club = greedyClub(distToPin + greedyElevAdj, distributions);
         const rawBearing = bearingBetween(currentPos, pin);
         const compensatedAim = compensateForBias(pin, rawBearing, club);
         shotBearing = bearingBetween(currentPos, compensatedAim);
@@ -870,7 +925,13 @@ function simulateWithPolicy(
       const carry = gaussianSample(club.meanCarry, club.stdCarry * lieMultiplier);
       const offline = gaussianSample(club.meanOffline, club.stdOffline * lieMultiplier);
 
-      let landing = projectPoint(currentPos, shotBearing, carry);
+      // Elevation-adjusted ground carry
+      const policyLandingDist = currentZone.distFromTee + carry;
+      const policyLandingElev = getProfileElevation(elevProfile, policyLandingDist);
+      const policyElevDelta = policyLandingElev - currentZone.elevation;
+      const policyAdjCarry = carry - policyElevDelta * ELEV_YARDS_PER_METER;
+
+      let landing = projectPoint(currentPos, shotBearing, policyAdjCarry);
       if (Math.abs(offline) > 0.5) {
         landing = projectPoint(landing, shotBearing + 90, offline);
       }
@@ -881,6 +942,10 @@ function simulateWithPolicy(
       if (treeHit.hitTrees) {
         landing = projectPoint(currentPos, shotBearing, treeHit.hitDistance);
         strokes += 0.5;
+      } else {
+        const policySlope = getProfileSlope(elevProfile, policyLandingDist);
+        const rollout = computeRollout(carry, club, landing, hole, policySlope);
+        if (rollout > 0.5) landing = projectPoint(landing, shotBearing, rollout);
       }
 
       const hazDrop = resolveHazardDrop(currentPos, landing, hole.hazards, hole.fairway, hole.green, roughPenalty);
@@ -899,14 +964,26 @@ function simulateWithPolicy(
     // Greedy approach if still far
     let distToPin = haversineYards(currentPos, pin);
     while (distToPin > chipThreshold && strokes < MAX_SHOTS_PER_HOLE) {
-      const club = greedyClub(distToPin, distributions);
+      // Elevation-adjusted club selection for greedy loop
+      const greedyDistFromTee = elevProfile.totalDist - distToPin;
+      const greedyElev = getProfileElevation(elevProfile, Math.max(0, greedyDistFromTee));
+      const greedyElevAdj = (hole.pin.elevation - greedyElev) * ELEV_YARDS_PER_METER;
+      const playsLikeDist = distToPin + greedyElevAdj;
+      const club = greedyClub(playsLikeDist, distributions);
+
       const carry = gaussianSample(club.meanCarry, club.stdCarry);
       const offline = gaussianSample(club.meanOffline, club.stdOffline);
       const greedyBearing = bearingBetween(currentPos, pin);
       const compensatedGreedyAim = compensateForBias(pin, greedyBearing, club);
       const shotBearing = bearingBetween(currentPos, compensatedGreedyAim);
 
-      let landing = projectPoint(currentPos, shotBearing, carry);
+      // Elevation-adjusted ground carry
+      const greedyLandingDist = Math.max(0, greedyDistFromTee) + carry;
+      const greedyLandingElev = getProfileElevation(elevProfile, greedyLandingDist);
+      const greedyCarryElevDelta = greedyLandingElev - greedyElev;
+      const greedyAdjCarry = carry - greedyCarryElevDelta * ELEV_YARDS_PER_METER;
+
+      let landing = projectPoint(currentPos, shotBearing, greedyAdjCarry);
       if (Math.abs(offline) > 0.5) {
         landing = projectPoint(landing, shotBearing + 90, offline);
       }
@@ -917,6 +994,10 @@ function simulateWithPolicy(
       if (greedyTreeHit.hitTrees) {
         landing = projectPoint(currentPos, shotBearing, greedyTreeHit.hitDistance);
         strokes += 0.5;
+      } else {
+        const greedySlope = getProfileSlope(elevProfile, greedyLandingDist);
+        const rollout = computeRollout(carry, club, landing, hole, greedySlope);
+        if (rollout > 0.5) landing = projectPoint(landing, shotBearing, rollout);
       }
 
       const hazDrop = resolveHazardDrop(currentPos, landing, hole.hazards, hole.fairway, hole.green, roughPenalty);
@@ -1006,14 +1087,14 @@ export function dpOptimizeHole(
 ): OptimizedStrategy[] {
   if (distributions.length === 0) return [];
 
-  // 1. Discretize hole into zones
-  const zones = discretizeHole(hole, teeBox);
+  // 1. Discretize hole into zones (with elevation profile)
+  const { zones, elevProfile } = discretizeHole(hole, teeBox);
   if (zones.length < 2) return [];
 
   // 2. Build transition table (shared across modes)
   const yardage = hole.yardages[teeBox] ?? Object.values(hole.yardages)[0] ?? 400;
   const bearingStep = bearingStepForDistance(yardage);
-  const table = buildTransitionTable(zones, distributions, hole, roughPenalty, bearingStep);
+  const table = buildTransitionTable(zones, distributions, hole, roughPenalty, bearingStep, elevProfile);
   if (table.length === 0) return [];
 
   const modes: ScoringMode[] = ['scoring', 'safe', 'aggressive'];
@@ -1034,7 +1115,7 @@ export function dpOptimizeHole(
     if (policies[i].size === 0) {
       plans.push({ name: MODE_LABELS[modes[i]].name, type: MODE_LABELS[modes[i]].type, shots: [] });
     } else {
-      plans.push(extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i]));
+      plans.push(extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i], elevProfile));
     }
   }
 
@@ -1054,7 +1135,7 @@ export function dpOptimizeHole(
         usedFirstClubs, distributions, roughPenalty,
       );
       if (alt) {
-        plans[i] = extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i], alt);
+        plans[i] = extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i], elevProfile, alt);
       }
     }
     usedKeys.add(planClubKey(plans[i]));
@@ -1065,7 +1146,7 @@ export function dpOptimizeHole(
   for (let i = 0; i < plans.length; i++) {
     if (policies[i].size === 0) continue;
 
-    const strategy = simulateWithPolicy(plans[i], hole, distributions, zones, policies[i], roughPenalty);
+    const strategy = simulateWithPolicy(plans[i], hole, distributions, zones, policies[i], roughPenalty, elevProfile);
     strategy.strategyName = plans[i].name;
     strategy.strategyType = plans[i].type;
     results.push(strategy);

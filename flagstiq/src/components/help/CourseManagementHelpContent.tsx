@@ -68,7 +68,7 @@ The lie multiplier $\lambda$ is 1.0 from the fairway and 1.15 from the rough —
 
 The sample count adapts to hazard density near the zone: 100 samples for safe areas, 250 near bunkers, and 350 near water or OB where precision matters most.
 
-Each sample is projected to a GPS landing point, checked for tree collisions along the 3D flight arc, checked against hazard polygons (with drop logic and stroke penalties), and then mapped to the nearest zone. The result is a transition table:
+Each sample is projected to a GPS carry landing point with per-shot elevation adjustment (uphill shots land shorter, downhill longer), checked for tree collisions along the 3D flight arc, extended by a slope-and-surface-aware rollout to a resting position, checked against hazard polygons (with drop logic and stroke penalties), and then mapped to the nearest zone. The result is a transition table:
 
 $$P(z' \mid z, a) = \frac{\text{samples landing in zone } z'}{N}$$
 
@@ -130,6 +130,43 @@ Descent phase ($d \geq d_\text{apex}$): $\quad h(d) = \text{apex} \cdot (\text{c
 
 Without measured data, it falls back to a symmetric parabola with a 28-yard (84 ft) apex.`}</P>
 
+      <H4>Rollout model</H4>
+      <P>{String.raw`The simulator distinguishes between carry landing (where the ball first contacts the ground) and resting position (where it stops rolling). Rollout is computed per-club and adjusted by landing surface.
+
+The rollout fraction is derived from your measured data when available — if your 7-iron carries 165 and totals 172, the rollout fraction is $(172 - 165) / 165 \approx 4.2\%$. For clubs without measured total distance, a loft-based formula provides a physics estimate:
+
+$$\text{rolloutFrac} = 0.12 \cdot e^{-0.05 \cdot \text{loft}}$$
+
+This gives drivers (~10.5°) roughly 7–8% rollout, mid-irons (~28°) roughly 3%, and wedges (~50°+) near zero — matching real-world behavior where low-lofted clubs with shallow descent angles roll out significantly more.
+
+For each sampled shot, rollout scales proportionally to carry distance: $\text{rollout} = \text{carry} \times \text{rolloutFrac} \times \text{surfaceMultiplier}$. This preserves the natural correlation — a longer carry produces a longer roll. The resting position is projected along the same bearing past the carry landing.
+
+Surface multipliers dampen rollout based on what the ball lands on:
+  Fairway — 1.0× (ball rolls freely on mowed surface)
+  Green — 0.65× (manicured but ball decelerates on short grass)
+  Rough — 0.3× (thick grass kills momentum quickly)
+  Bunker — 0× (ball plugs in sand, no rollout)
+  Water/OB — 0× (ball is lost, hazard drop resolves it)
+
+After tree collision: if a ball hits trees, it drops dead with no rollout. Otherwise, rollout is applied and the resting position is checked against hazard polygons — so a drive that carries safely past a bunker but rolls into it is correctly penalized.
+
+Slope also affects rollout. At the landing point, the simulator measures the local slope (meters elevation change per yard of ground distance) and applies a slope multiplier: downhill landings roll out more, uphill landings roll out less. The multiplier is clamped between 0.5× and 1.5× to prevent extreme adjustments.`}</P>
+
+      <H4>Per-shot elevation adjustment</H4>
+      <P>{String.raw`Rather than applying a single tee-to-pin elevation adjustment, the simulator computes elevation effects for each individual shot using the centerLine's elevation profile.
+
+At course import, the centerLine stores GPS elevation at each waypoint. The optimizer pre-computes an elevation profile — elevation samples every 10 yards along the centerLine — and uses O(1) interpolation to look up elevation at any distance from the tee.
+
+Each zone records its elevation (meters above sea level) and distance from the tee. When simulating a shot, the elevation delta between the source zone and the projected landing point determines how far the ball travels along the ground:
+
+$$\text{groundCarry} = \text{carry} - \Delta\text{elev} \times 1.09$$
+
+Uphill shots ($\Delta\text{elev} > 0$) cover less ground — the ball has to climb, so its horizontal footprint shrinks. Downhill shots ($\Delta\text{elev} < 0$) cover more ground — the ball descends longer before touching down.
+
+This adjustment applies to every sampled shot in the transition table, every Monte Carlo trial, and every greedy recovery shot. Club selection also uses elevation-adjusted "plays like" distance — on an uphill approach, the optimizer selects a stronger club because the ball needs to travel further than the flat distance suggests.
+
+When the centerLine has no real elevation data (e.g., synthetic centerLines for doglegs), all elevations default to zero and the adjustment has no effect — identical to the previous flat-earth behavior.`}</P>
+
       <H4>Putting model</H4>
       <P>{String.raw`Once on the green, a log-curve model fitted to PGA strokes-gained data converts distance to expected putts:
 
@@ -187,7 +224,13 @@ The top 4 holes by delta are flagged as KEY — these are the holes where playin
   Default ball apex — 28 yards (84 ft)
   Convergence threshold — max $\Delta V$ < 0.001 or 50 iterations
   Safe mode variance weight — $+1.0\sigma$
-  Aggressive mode green bonus — $-0.6 \cdot P(\text{green})$`}</P>
+  Aggressive mode green bonus — $-0.6 \cdot P(\text{green})$
+  Rollout formula — $0.12 \cdot e^{-0.05 \cdot \text{loft}}$ (fallback when no measured total)
+  Rollout surface — fairway 1.0×, green 0.65×, rough 0.3×, bunker 0×
+  Rollout slope factor — 3.0 (rollout change per unit slope, clamped 0.5×–1.5×)
+  Default loft — 30° (mid-iron, used when club loft is unknown)
+  Elevation adjustment — 1.09 yards per meter of elevation change
+  Elevation profile step — 10 yards between samples`}</P>
     </>
   );
 }

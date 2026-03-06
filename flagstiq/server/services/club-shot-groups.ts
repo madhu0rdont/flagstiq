@@ -11,6 +11,7 @@ export interface ClubShotGroup {
   clubName: string;
   category: string;
   color: string;
+  loft?: number;
   shots: Shot[];
   imputed?: boolean;
 }
@@ -55,6 +56,7 @@ export function computeClubShotGroups(clubs: Club[], allShots: Shot[]): ClubShot
         clubName: club.name,
         category: club.category,
         color: CLUB_COLORS[colorIdx % CLUB_COLORS.length],
+        loft: club.loft ?? undefined,
         shots,
       });
       colorIdx++;
@@ -67,6 +69,7 @@ export function computeClubShotGroups(clubs: Club[], allShots: Shot[]): ClubShot
           clubName: club.name,
           category: club.category,
           color: CLUB_COLORS[colorIdx % CLUB_COLORS.length],
+          loft: club.loft,
           shots: [syntheticShot(club.id, metrics)],
           imputed: true,
         });
@@ -79,6 +82,7 @@ export function computeClubShotGroups(clubs: Club[], allShots: Shot[]): ClubShot
             clubName: club.name,
             category: club.category,
             color: CLUB_COLORS[colorIdx % CLUB_COLORS.length],
+            loft: club.loft,
             shots: [syntheticShot(club.id, metrics)],
             imputed: true,
           });

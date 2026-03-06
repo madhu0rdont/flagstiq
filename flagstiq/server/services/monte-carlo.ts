@@ -12,6 +12,8 @@ export interface ClubDistribution {
   meanApex?: number;         // mean apex height in yards (from shot data)
   meanLaunchAngle?: number;  // mean launch angle in degrees
   meanDescentAngle?: number; // mean descent angle in degrees
+  meanTotal?: number;        // mean total distance (carry + rollout)
+  loft?: number;             // club loft in degrees (for imputed rollout)
 }
 
 export interface ApproachStrategy {
@@ -84,6 +86,7 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
     const shotsForDist = goodShots.length >= MIN_SHOTS_FOR_DISTRIBUTION ? goodShots : group.shots;
 
     const carries = shotsForDist.map((s) => s.carryYards);
+    const totals = shotsForDist.map((s) => s.totalYards).filter((v): v is number => v != null);
     const offlines = shotsForDist
       .map((s) => s.offlineYards)
       .filter((v): v is number => v != null);
@@ -92,17 +95,20 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
     const launches = shotsForDist.map((s) => s.launchAngle).filter((v): v is number => v != null);
     const descents = shotsForDist.map((s) => s.descentAngle).filter((v): v is number => v != null);
 
+    const meanCarryVal = mean(carries);
     const dist: ClubDistribution = {
       clubId: group.clubId,
       clubName: group.clubName,
       category: group.category,
-      meanCarry: mean(carries),
+      meanCarry: meanCarryVal,
       stdCarry: stddev(carries),
       meanOffline: offlines.length > 0 ? mean(offlines) : 0,
       stdOffline: offlines.length > 0 ? stddev(offlines) : 5,
       ...(apexes.length > 0 && { meanApex: mean(apexes) }),
       ...(launches.length > 0 && { meanLaunchAngle: mean(launches) }),
       ...(descents.length > 0 && { meanDescentAngle: mean(descents) }),
+      ...(totals.length > 0 && { meanTotal: mean(totals) }),
+      ...(group.loft != null && { loft: group.loft }),
     };
     distributions.push(dist);
     realDists.push({ meanCarry: dist.meanCarry, meanOffline: dist.meanOffline, stdCarry: dist.stdCarry, stdOffline: dist.stdOffline });
@@ -113,6 +119,7 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
     const carry = group.shots[0].carryYards;
     if (carry <= 0) continue;
 
+    const total = group.shots[0].totalYards;
     const { meanOffline, stdCarry, stdOffline } = estimateDispersion(carry, realDists);
     distributions.push({
       clubId: group.clubId,
@@ -122,6 +129,8 @@ export function buildDistributions(groups: ClubShotGroup[]): ClubDistribution[] 
       stdCarry,
       meanOffline,
       stdOffline,
+      ...(total != null && total > carry && { meanTotal: total }),
+      ...(group.loft != null && { loft: group.loft }),
     });
   }
 
