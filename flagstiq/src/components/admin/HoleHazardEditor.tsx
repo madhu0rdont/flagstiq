@@ -58,6 +58,8 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
   const [par, setPar] = useState(4);
   const [handicap, setHandicap] = useState<number | null>(null);
   const [yardages, setYardages] = useState<Record<string, number>>({});
+  const [teePos, setTeePos] = useState<{ lat: number; lng: number } | null>(null);
+  const [pinPos, setPinPos] = useState<{ lat: number; lng: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [drawingMode, setDrawingMode] = useState<DrawingMode>(null);
@@ -79,6 +81,8 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
       setFairways(hole.fairway ?? []);
       // Prefer top-level green, fall back to legacy hazard green
       setGreen(hole.green?.length ? hole.green : legacyGreen?.polygon ?? []);
+      setTeePos({ lat: hole.tee.lat, lng: hole.tee.lng });
+      setPinPos({ lat: hole.pin.lat, lng: hole.pin.lng });
       setNotes(hole.notes ?? '');
       setPar(hole.par);
       setHandicap(hole.handicap);
@@ -219,25 +223,43 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
 
     // Tee marker
     const teeEl = document.createElement('div');
-    teeEl.style.cssText = 'width:24px;height:24px;border-radius:50%;background:#3B82F6;border:2px solid white;display:flex;align-items:center;justify-content:center;font:bold 11px sans-serif;color:white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
+    teeEl.style.cssText = 'width:24px;height:24px;border-radius:50%;background:#3B82F6;border:2px solid white;display:flex;align-items:center;justify-content:center;font:bold 11px sans-serif;color:white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:grab;';
     teeEl.textContent = 'T';
     const teeMarker = new google.maps.marker.AdvancedMarkerElement({
       map,
       position: { lat: hole.tee.lat, lng: hole.tee.lng },
       content: teeEl,
-      title: 'Tee',
+      title: 'Tee — drag to reposition',
+      gmpDraggable: true,
+    });
+    teeMarker.addListener('dragend', () => {
+      const pos = teeMarker.position;
+      if (pos) {
+        const lat = typeof pos.lat === 'function' ? (pos.lat as () => number)() : pos.lat as number;
+        const lng = typeof pos.lng === 'function' ? (pos.lng as () => number)() : pos.lng as number;
+        setTeePos({ lat, lng });
+      }
     });
     markersRef.current.push(teeMarker);
 
     // Pin marker
     const pinEl = document.createElement('div');
-    pinEl.style.cssText = 'width:24px;height:24px;border-radius:50%;background:#EF4444;border:2px solid white;display:flex;align-items:center;justify-content:center;font:bold 11px sans-serif;color:white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
+    pinEl.style.cssText = 'width:24px;height:24px;border-radius:50%;background:#EF4444;border:2px solid white;display:flex;align-items:center;justify-content:center;font:bold 11px sans-serif;color:white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:grab;';
     pinEl.textContent = 'P';
     const pinMarker = new google.maps.marker.AdvancedMarkerElement({
       map,
       position: { lat: hole.pin.lat, lng: hole.pin.lng },
       content: pinEl,
-      title: 'Pin',
+      title: 'Pin — drag to reposition',
+      gmpDraggable: true,
+    });
+    pinMarker.addListener('dragend', () => {
+      const pos = pinMarker.position;
+      if (pos) {
+        const lat = typeof pos.lat === 'function' ? (pos.lat as () => number)() : pos.lat as number;
+        const lng = typeof pos.lng === 'function' ? (pos.lng as () => number)() : pos.lng as number;
+        setPinPos({ lat, lng });
+      }
     });
     markersRef.current.push(pinMarker);
 
@@ -459,7 +481,18 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
         credentials: 'include',
-        body: JSON.stringify({ hazards, fairway: fairways, green, notes: notes || null, par, handicap, yardages }),
+        body: JSON.stringify({
+          hazards,
+          fairway: fairways,
+          green,
+          notes: notes || null,
+          par,
+          handicap,
+          yardages,
+          ...(teePos && { tee: teePos }),
+          ...(pinPos && { pin: pinPos }),
+          ...(teePos && pinPos && { heading: bearingBetween(teePos, pinPos) }),
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Save failed' }));
@@ -581,6 +614,14 @@ export function HoleHazardEditor({ courseId, holeNumber, onSave }: HoleHazardEdi
         ref={mapRef}
         className="h-[400px] w-full rounded-sm overflow-hidden border border-border"
       />
+
+      {/* Tee/Pin moved indicator */}
+      {hole && ((teePos && (teePos.lat !== hole.tee.lat || teePos.lng !== hole.tee.lng)) ||
+        (pinPos && (pinPos.lat !== hole.pin.lat || pinPos.lng !== hole.pin.lng))) && (
+        <p className="text-xs text-amber-600">
+          Tee/Pin position changed — save to persist.
+        </p>
+      )}
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2">

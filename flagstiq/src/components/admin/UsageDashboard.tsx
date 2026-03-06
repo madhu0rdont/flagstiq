@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Cpu, Mountain, Mail, Server, Loader2, ExternalLink } from 'lucide-react';
+import { Cpu, Mountain, Mail, Server, Map, Loader2, ExternalLink } from 'lucide-react';
 import { api } from '../../lib/api';
 
 interface ServiceSummary {
@@ -279,6 +279,26 @@ export function UsageDashboard() {
                 <span>View Dashboard</span>
               </div>
               <p className="text-[10px] text-text-muted mt-1">Hosting & compute costs</p>
+            </a>
+
+            {/* Google Cloud */}
+            <a
+              href="https://console.cloud.google.com/billing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-sm border border-border bg-card p-3 hover:border-fairway transition-colors"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded bg-blue-500/10">
+                  <Map size={14} className="text-blue-500" />
+                </div>
+                <p className="text-xs font-medium text-text-dark">Google Cloud</p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-primary">
+                <ExternalLink size={12} />
+                <span>View Console</span>
+              </div>
+              <p className="text-[10px] text-text-muted mt-1">Maps JS & Static Maps API</p>
             </a>
           </div>
 

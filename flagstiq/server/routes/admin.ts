@@ -507,13 +507,13 @@ router.put('/hazard-penalties', async (req, res) => {
 
 // PATCH /api/courses/:id/holes/:number — update hole fields
 router.patch('/:id/holes/:number', async (req, res) => {
-  const ALLOWED_FIELDS = ['hazards', 'fairway', 'green', 'notes', 'targets', 'plays_like_yards', 'yardages', 'handicap', 'par'];
+  const ALLOWED_FIELDS = ['hazards', 'fairway', 'green', 'notes', 'targets', 'plays_like_yards', 'yardages', 'handicap', 'par', 'tee', 'pin', 'heading', 'center_line'];
   const updates = toSnake(req.body);
 
   const setClauses: string[] = [];
   const values: unknown[] = [];
 
-  const SCALAR_FIELDS = ['notes', 'handicap', 'par'];
+  const SCALAR_FIELDS = ['notes', 'handicap', 'par', 'heading'];
   for (const [key, val] of Object.entries(updates)) {
     if (!ALLOWED_FIELDS.includes(key)) continue;
     values.push(SCALAR_FIELDS.includes(key) ? val : JSON.stringify(val));
