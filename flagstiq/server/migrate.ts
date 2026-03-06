@@ -363,7 +363,7 @@ export async function migrate() {
 
   // Force regeneration of all cached game plans after strategy-optimizer changes
   // Bump version when optimizer logic changes (caddy tips, strategies, simulation, etc.)
-  const STRATEGY_SYNC_VERSION = 'strategy_sync_v5'; // v5: v4 + auto-regen trigger
+  const STRATEGY_SYNC_VERSION = 'strategy_sync_v6'; // v6: stronger mode weights + dedup identical strategies
   const { rows: syncFlag } = await query(
     'SELECT 1 FROM _migration_flags WHERE flag = $1',
     [STRATEGY_SYNC_VERSION],

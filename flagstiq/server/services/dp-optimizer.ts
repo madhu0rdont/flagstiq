@@ -589,15 +589,14 @@ function valueIteration(
           // Pure expected strokes minimization
           modeValue = actionValue;
         } else if (mode === 'safe') {
-          // Risk-adjusted: penalize variance
+          // Risk-adjusted: penalize variance (strongly prefer low-variance plays)
           const futureVariance = evSq - ev * ev;
           const totalStd = Math.sqrt(Math.max(0, penaltyVariance + futureVariance));
-          modeValue = actionValue + 0.5 * totalStd;
+          modeValue = actionValue + 1.0 * totalStd;
         } else {
           // Aggressive: reward birdie potential
-          // Estimate P(birdie): P(finishing in ≤ par-1 total strokes from here)
-          // Approximate: lower expected strokes increases birdie chance, bonus for green reach
-          const birdieBonus = pGreen * 0.3; // reaching green gives better birdie odds
+          // Strongly reward reaching the green — even at cost of higher variance
+          const birdieBonus = pGreen * 0.6;
           modeValue = actionValue - birdieBonus;
         }
 
@@ -679,9 +678,9 @@ function findAlternativeTeeAction(
     } else if (mode === 'safe') {
       const futureVariance = evSq - ev * ev;
       const totalStd = Math.sqrt(Math.max(0, penaltyVariance + futureVariance));
-      modeValue = actionValue + 0.5 * totalStd;
+      modeValue = actionValue + 1.0 * totalStd;
     } else {
-      const birdieBonus = pGreen * 0.3;
+      const birdieBonus = pGreen * 0.6;
       modeValue = actionValue - birdieBonus;
     }
 
@@ -1037,14 +1036,17 @@ export function dpOptimizeHole(
     }
   }
 
-  // 5. Diversity enforcement — ensure different first-shot clubs
+  // 5. Diversity enforcement — ensure unique club sequences across strategies
+  const planClubKey = (p: NamedStrategyPlan) => p.shots.map((s) => s.clubDist.clubName).join('|');
+  const usedKeys = new Set<string>();
   const usedFirstClubs = new Set<string>();
   for (let i = 0; i < plans.length; i++) {
+    const key = planClubKey(plans[i]);
     const firstClub = plans[i].shots[0]?.clubDist.clubName;
     if (!firstClub) continue;
 
-    if (usedFirstClubs.has(firstClub)) {
-      // Find alternative tee action for this mode
+    if (usedKeys.has(key) || usedFirstClubs.has(firstClub)) {
+      // Try to find an alternative tee club for this mode
       const alt = findAlternativeTeeAction(
         zones, table, allValues[i], modes[i], hole.par,
         usedFirstClubs, distributions, roughPenalty,
@@ -1053,6 +1055,7 @@ export function dpOptimizeHole(
         plans[i] = extractPlan(zones, policies[i], distributions, hole, teeBox, modes[i], alt);
       }
     }
+    usedKeys.add(planClubKey(plans[i]));
     usedFirstClubs.add(plans[i].shots[0]?.clubDist.clubName ?? '');
   }
 
@@ -1066,9 +1069,19 @@ export function dpOptimizeHole(
     results.push(strategy);
   }
 
+  // Deduplicate strategies with identical club sequences
+  const seenClubKeys = new Set<string>();
+  const unique: OptimizedStrategy[] = [];
+  for (const r of results) {
+    const key = r.clubs.map((c) => c.clubName).join('|');
+    if (seenClubKeys.has(key)) continue;
+    seenClubKeys.add(key);
+    unique.push(r);
+  }
+
   // Sort by expected strokes ascending, with fairway rate as tiebreaker
   // When strategies are within 0.3 strokes, prefer the one with higher fairway rate
-  results.sort((a, b) => {
+  unique.sort((a, b) => {
     const strokeDiff = a.expectedStrokes - b.expectedStrokes;
     if (Math.abs(strokeDiff) > 0.3) return strokeDiff;
     // Within 0.3 strokes — prefer higher fairway/green rate
@@ -1077,5 +1090,5 @@ export function dpOptimizeHole(
     return strokeDiff;
   });
 
-  return results;
+  return unique;
 }

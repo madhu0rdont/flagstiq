@@ -323,15 +323,16 @@ describe('dpOptimizeHole — par 4', () => {
     results = dpOptimizeHole(hole, 'blue', dists);
   });
 
-  it('returns 3 strategies', () => {
-    expect(results.length).toBe(3);
+  it('returns 1-3 unique strategies', () => {
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results.length).toBeLessThanOrEqual(3);
   });
 
-  it('strategy names cover all 3 modes', () => {
-    const names = new Set(results.map((r) => r.strategyName));
-    expect(names.has('Optimal Scoring')).toBe(true);
-    expect(names.has('Risk-Averse')).toBe(true);
-    expect(names.has('Birdie Hunt')).toBe(true);
+  it('strategy names are from the 3 modes', () => {
+    const validNames = new Set(['Optimal Scoring', 'Risk-Averse', 'Birdie Hunt']);
+    for (const r of results) {
+      expect(validNames.has(r.strategyName)).toBe(true);
+    }
   });
 
   it('expected strokes are reasonable for a par 4', () => {
